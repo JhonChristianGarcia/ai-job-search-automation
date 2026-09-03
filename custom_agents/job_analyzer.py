@@ -58,7 +58,7 @@ class AgentOutput(BaseModel):
 job_analyzer_agent = Agent(
     name="Job Analyzer Agent", 
     instructions=prompt(),
-    model=local_qwen_llm_model_3b,
+    model=local_qwen_llm_model,
     output_type=AgentOutput,
     model_settings=ModelSettings(
         include_usage=True,
