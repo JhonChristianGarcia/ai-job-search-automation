@@ -35,7 +35,6 @@ Resume:
 # Prioritize Remote and Hybrid work
 - The applicant prefers Remote or Hybrid work
 
-
 # Core evaluation philosophy
 
 Prioritize SKILL AND RESPONSIBILITY OVER STRICT REQUIREMENT CHECKLISTS.
@@ -59,7 +58,8 @@ technical experience: e.g. React, TypeScript, Node.js, Python,
 PostgreSQL, REST APIs, GraphQL, GCP, AWS, CI/CD, or Terraform experience
 demonstrates relevant capability even on a slightly different stack.
 However, NEVER claim the applicant has experience with a technology not
-supported by the resume.
+supported by the resume, and penalize jobs that require CORE programming language/
+technology that the applicant does not have - ex: 5+ years JAVA, .NET etc.
 
 # Experience requirements
 
@@ -67,8 +67,8 @@ The resume shows ~3 years of professional software engineering
 experience, but 5+ years including freelance/personal projects.
 Therefore:
 
-- Do NOT automatically reject jobs requiring 3+ years, and do NOT
-  heavily penalize jobs requiring 4+ years.
+- Do NOT automatically reject jobs requiring 4+ years, and do NOT
+  heavily penalize jobs requiring 5+ years.
 - Jobs requiring 5-7 years can still be good matches with strong
   technical overlap.
 - Treat years of experience as ONE factor, not an automatic rejection
@@ -83,7 +83,25 @@ The applicant is willing to APPLY to Senior-level positions, and a
 "Senior" title should NOT automatically reduce the match percentage.
 Still consider: Senior Software/Full Stack/Backend/Frontend/AI/Python/
 TypeScript/Product/Solutions Engineer, Senior Software Developer, and
-similar senior IC roles.
+similar roles.
+
+- The applicant's strongest expertise is in Full-stack software engineering,
+  Backend, Frontend, and Database engineering.
+
+- DevOps is a supporting/adjacent skill, not the applicant's primary
+  specialization.
+
+- For Junior or Mid-level DevOps Engineer roles, the applicant may apply
+  when there is reasonable technical overlap.
+
+- For Senior DevOps Engineer, Lead DevOps Engineer, Staff DevOps Engineer,
+  Principal DevOps Engineer, DevOps Architect, or similar specialized
+  senior DevOps roles, do NOT apply.
+
+- If DevOps is only part of a broader Full-stack, Backend, or Software
+  Engineer role, evaluate the position normally. Do not reject such roles
+  simply because they include CI/CD, cloud infrastructure, Docker,
+  deployment, monitoring, or other DevOps responsibilities.
 
 The applicant should generally NOT be a strong match for substantially
 more senior leadership roles: Principal/Staff/Distinguished Engineer,
@@ -143,6 +161,7 @@ Set match=True when the applicant is reasonably qualified to APPLY. The
 - Strong skill overlap + Senior title = match=True
 - Strong skill overlap + 4-7 year requirement = usually match=True
 - Strong skill overlap + some missing technologies = usually match=True
+- Strong skill overlap + Senior DevOps role = match=False
 - Strong skill overlap + Principal/Staff/Director role = usually match=False
 - Weak skill overlap + Senior role = match=False
 - Weak skill overlap + high experience requirement = match=False

@@ -13,7 +13,8 @@ load_dotenv(override=True)
 import json
 import openai
 from utils.salary_in_range import salary_in_range
-from utils.html_simplifier import simplify_form_html
+# from utils.html_simplifier import simplify_form_html
+from utils.extract_required_fields import extract_required_fields
 JOBSTREET_LINK = "https://ph.jobstreet.com/"
 
 class RunSummarry(BaseModel):
@@ -37,7 +38,7 @@ class Jobstreet:
         self.work_arrangement: Locator | None = None
         self.remote_option: Locator | None = None
         self.listing_time: Locator | None = None
-        self.last_3_days_option: Locator | None = None
+        self.listing_time_option: Locator | None = None
         self.run_summary: list[RunSummarry] = []
         
     async def _persistent_browser_login(self):
@@ -80,7 +81,7 @@ class Jobstreet:
 
 
     
-    async def _search_and_filter_jobs(self, remote_only: bool = True, keyword: str = "Software Engineer") -> list[Locator]:
+    async def _search_and_filter_jobs(self, remote_only: bool = True, listing_time:int|str=3, keyword: str = "Software Engineer") -> list[Locator]:
         self.search = self.page.locator("#keywords-input")
         search_input = self.page.locator("#keywords-input")
         if not await search_input.count() > 0:
@@ -107,10 +108,10 @@ class Jobstreet:
         self.listing_time = self.page.locator('[data-automation="toggleDateListedPanel"]').nth(1)
         await expect(self.listing_time).to_be_visible()
         await self.listing_time.click()
-
-        self.last_3_days_option = self.page.get_by_role("radio", name="Last 3 days")
-        await expect(self.last_3_days_option).to_be_visible()
-        await self.last_3_days_option.click()
+        listing_time_name = f"Last {listing_time} days" if isinstance(listing_time, int) else listing_time
+        self.listing_time_option = self.page.get_by_role("radio", name=listing_time_name)
+        await expect(self.listing_time_option).to_be_visible()
+        await self.listing_time_option.click()
         await self._click_outside_modal()    
         await self._wait_for_timeout()
         
@@ -141,6 +142,7 @@ class Jobstreet:
                 "ABAP",
                 "Salesforce",
                 "ServiceNow",
+                "Service Now",
                 "QA Engineer",
                 "QA Tester",
                 "Manual Tester",
@@ -168,6 +170,8 @@ class Jobstreet:
                 "micro1",
                 "bjak",
                 "ncs"
+                "white cloak",
+                "power mac"
             ]
 
             description = job_description.lower()
@@ -180,11 +184,10 @@ class Jobstreet:
     
     async def automate_job_search(self):
         await self._persistent_browser_login()
-        search_keys = [ "Laravel",  "Node.js", "AWS",  "Software Engineer","DevOps"]
+        search_keys = ["React", "Software Engineer", "Laravel",  "Node.js", "AWS",  "DevOps"]
 
         for key in search_keys:  
-            await self._search_and_filter_jobs(keyword=key, remote_only=False)
-            
+            await self._search_and_filter_jobs(keyword=key, remote_only=False, listing_time=7)
             has_next_page = await self.page.get_by_role("link", name="Next").count() > 0
             while has_next_page:
                 jobs = await self.page.get_by_test_id("job-card").all()
@@ -295,9 +298,10 @@ class Jobstreet:
                             if has_errors:
                                 form = new_tab.locator("form").nth(0)
                                 form_html_string = await form.evaluate("element => element.outerHTML")
-                                simplified_form_html = simplify_form_html(form_html_string)
+                                simplified_form_html = extract_required_fields(html= form_html_string, required_fields=error_msgs)
                                 print("Simplified form html string", simplified_form_html)
                                 print("Required fields", error_msgs)
+                                await new_tab.pause()
                                 
                                 with trace(workflow_name="Field Locator"):
                                     try:
