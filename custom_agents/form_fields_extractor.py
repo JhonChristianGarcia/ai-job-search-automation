@@ -23,6 +23,12 @@ local_qwen_coder_model = LitellmModel(
     base_url="http://127.0.0.1:1234/v1"
 )
 
+macbook_pro_qwen_2_5_7b_coder_model = LitellmModel(
+    model="lm_studio/qwen2.5-coder-7b-instruct",
+    api_key="qwen2.5-coder-7b-instruct",
+    base_url="http://192.168.0.154:1234/v1",
+)
+
 INSTRUCTIONS = """
     You are a Locator Agent.
 
@@ -33,7 +39,7 @@ INSTRUCTIONS = """
     all user-interactable form fields.
 
     Your output MUST follow the provided structured output schema.
-
+    ## NOTE: Only answer required fields - leave the fields that  already have answers
     ## OBJECTIVE
 
     For every relevant form field, identify:
@@ -244,12 +250,16 @@ class AgentOutput(BaseModel):
 fields_extractor_agent = Agent(
     name="Fields Extractor Agent",
     instructions=INSTRUCTIONS,
-    model=local_qwen_coder_model,
+    model=macbook_pro_qwen_2_5_7b_coder_model,
     output_type=AgentOutput,
     model_settings=ModelSettings(
             include_usage=True,
             timeout=10_000,
-    )
+            temperature=0.0,
+            extra_body={
+                "enable_thinking": False,
+            }
+        ),
 )
 
 async def test_model():

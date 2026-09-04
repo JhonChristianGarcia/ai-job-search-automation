@@ -47,6 +47,11 @@ open_router_model = OpenAIChatCompletionsModel(
     openai_client=open_router_client
 )
 
+macbook_pro_qwen_3_5_9b_model = LitellmModel(
+    model="lm_studio/qwen3.5-9b-instruct-pure",
+    api_key="qwen3.5-9b-instruct-pure",
+    base_url="http://192.168.0.154:1234/v1",
+)
 class AgentOutput(BaseModel):
     match: bool
     percentage: int
@@ -58,12 +63,17 @@ class AgentOutput(BaseModel):
 job_analyzer_agent = Agent(
     name="Job Analyzer Agent", 
     instructions=prompt(),
-    model=local_qwen_llm_model,
+    model=macbook_pro_qwen_3_5_9b_model,
     output_type=AgentOutput,
     model_settings=ModelSettings(
         include_usage=True,
         timeout=10_000,
-    )
+        temperature=0.0,
+        extra_body={
+            "enable_thinking": False,
+        }
+    ),
+    
     # tools=[send_email]
 )
 async def test_model():

@@ -27,6 +27,15 @@ Name:
 Resume:
 {resume}
 
+# Spot non-negotiables 
+- {applicant_name} is not open to FULL ONSITE WORK 
+- Reject any mention of FULL ONSITE WORK
+- If there are so many technologies that are required and the applicant does not, discourage applying
+
+# Prioritize Remote and Hybrid work
+- The applicant prefers Remote or Hybrid work
+
+
 # Core evaluation philosophy
 
 Prioritize SKILL AND RESPONSIBILITY OVER STRICT REQUIREMENT CHECKLISTS.

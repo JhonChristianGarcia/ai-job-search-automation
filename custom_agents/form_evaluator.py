@@ -10,12 +10,20 @@ local_qwen_coder_model = LitellmModel(
     api_key="lm-studio",
     base_url="http://127.0.0.1:1234/v1"
 )
+
+
+macbook_pro_qwen_3_5_9b_model = LitellmModel(
+    model="lm_studio/qwen3.5-9b-instruct-pure",
+    api_key="qwen3.5-9b-instruct-pure",
+    base_url="http://192.168.0.154:1234/v1",
+)
+
 additional_context = f"""
     Portfolio link: https://www.jhonchristiangarcia.dev/
     Linkedin profile: https://www.linkedin.com/in/jhonchristiangarcia/
     Mobile number: +63 910 785 7097
     
-    Expected monthly salary: PHP85,000 - PHP 95,000 [If the field is a select field, choose the closest option to this range or if it is a USD field convert it to USD using PHP60 = USD1]
+    Expected monthly salary: PHP100,000 [If the field is a select field, choose the closest option to this range or if it is a USD field convert it to USD using PHP60 = USD1]
     Willing to work remotely: Yes
     Willing to work full on-site: No
     Willing to work hybrid: Yes
@@ -228,7 +236,7 @@ class AgentOutput(BaseModel):
 form_evaluator = Agent(
     name="Form Evaluator Agent",
     instructions=INSTRUCTIONS,
-    model=local_qwen_coder_model,
+    model=macbook_pro_qwen_3_5_9b_model,
     output_type=AgentOutput,
     model_settings=ModelSettings(
             include_usage=True,
