@@ -962,7 +962,9 @@ dependencies = [
     { name = "groq" },
     { name = "openai" },
     { name = "openai-agents", extra = ["litellm"] },
+    { name = "playsound3" },
     { name = "playwright" },
+    { name = "playwright-stealth" },
     { name = "pymupdf4llm" },
     { name = "pypdf" },
     { name = "pytest-playwright" },
@@ -975,7 +977,9 @@ requires-dist = [
     { name = "groq", specifier = ">=1.7.0" },
     { name = "openai", specifier = ">=3.6.0" },
     { name = "openai-agents", extras = ["litellm"], specifier = ">=0.22.0" },
+    { name = "playsound3", specifier = ">=3.3.2" },
     { name = "playwright", specifier = ">=1.62.0" },
+    { name = "playwright-stealth", specifier = ">=2.0.3" },
     { name = "pymupdf4llm", specifier = ">=1.28.2" },
     { name = "pypdf", specifier = ">=6.16.2" },
     { name = "pytest-playwright", specifier = ">=0.9.0" },
@@ -1408,6 +1412,18 @@ wheels = [
 ]
 
 [[package]]
+name = "playsound3"
+version = "3.3.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f8/da/cad7906fffd15c13db1ee02054e0d59d86711e366947f05bc9a2e9da0e8a/playsound3-3.3.2.tar.gz", hash = "sha256:a19d9f542beb3ce5ecb4ca780b47092c785725263e339bed8e7d340b322c4f9d", size = 608816, upload-time = "2026-07-18T11:31:59.941Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/39/93f689120673873a1328fbf94b6906a16b5ada41f33af0699f2eddc73cff/playsound3-3.3.2-py3-none-any.whl", hash = "sha256:fde2ca4378ae7a34d125a5965799fb1eee2af9907dbec29d394e29d28ee4137b", size = 9824, upload-time = "2026-07-18T11:31:58.207Z" },
+]
+
+[[package]]
 name = "playwright"
 version = "1.62.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1424,6 +1440,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/81/22/af5d926fc2c32a339eec00a443644bc40ab9db1dd2dd9017873c59773c0c/playwright-1.62.0-py3-none-win32.whl", hash = "sha256:e5614fa89355d7081457680324bb219f79f69c423c5cb6fa250e30b0d8aebf1c", size = 38164450, upload-time = "2026-07-31T17:01:04.187Z" },
     { url = "https://files.pythonhosted.org/packages/2b/a9/4160c1033c07af98bf841ad079457dd78408a5ee0dd56cbfe50b8b6a1c22/playwright-1.62.0-py3-none-win_amd64.whl", hash = "sha256:92c0d98ed04eb35af557b709875edba415b1f548bdb22ddb5bb3e1e6c835c2f1", size = 38164458, upload-time = "2026-07-31T17:01:08.459Z" },
     { url = "https://files.pythonhosted.org/packages/6c/ec/06b55d619a7082a766aa04f2c6bb31435c87f02930087d8a0517119408fa/playwright-1.62.0-py3-none-win_arm64.whl", hash = "sha256:ea8d3055aa9d5a9f1832ac82517bd8b42c78fac7ebcbebb0107116735c8cb6a1", size = 34208868, upload-time = "2026-07-31T17:01:11.818Z" },
+]
+
+[[package]]
+name = "playwright-stealth"
+version = "2.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "playwright" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a4/db/6ade5d539c7d151b9defc78fafa8b65aa52352617d0e7699b47008bd801f/playwright_stealth-2.0.3.tar.gz", hash = "sha256:1d8e488fbdd8f190f1269ea8cf5d57d14df3a9f1af1001c41ee3588b2aac3133", size = 25751, upload-time = "2026-04-04T02:50:33.88Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b5/10/607c409712c02a26c4cb794820514cb7fdaaeac15fb05bed917fb8a354b3/playwright_stealth-2.0.3-py3-none-any.whl", hash = "sha256:1887ade423ab7ff8ae16d363a30a38de0b5817e1e4a29d47b74bf3a0e3dbfcb4", size = 34385, upload-time = "2026-04-04T02:50:35.246Z" },
 ]
 
 [[package]]

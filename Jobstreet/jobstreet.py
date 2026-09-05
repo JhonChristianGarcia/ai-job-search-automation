@@ -1,21 +1,28 @@
+import asyncio
 import re
 from pathlib import Path
-import asyncio
-from playwright.async_api import async_playwright, Page, expect, Locator
+from pprint import pprint
+
 from agents import Runner, trace
 from dotenv import load_dotenv
-from custom_agents.job_analyzer import job_analyzer_agent
-from custom_agents.form_fields_extractor import fields_extractor_agent
-from custom_agents.form_evaluator import form_evaluator
+from playwright.async_api import Locator, Page, async_playwright, expect
 from pydantic import BaseModel
-from pprint import pprint
+
+from custom_agents.form_evaluator import form_evaluator
+from custom_agents.form_fields_extractor import fields_extractor_agent
+from custom_agents.job_analyzer import job_analyzer_agent
+
 load_dotenv(override=True)
 import json
+
 import openai
-from utils.salary_in_range import salary_in_range
+
 # from utils.html_simplifier import simplify_form_html
 from utils.extract_required_fields import extract_required_fields
+from utils.salary_in_range import salary_in_range
+
 JOBSTREET_LINK = "https://ph.jobstreet.com/"
+
 
 class RunSummarry(BaseModel):
     job_title: str
@@ -25,14 +32,15 @@ class RunSummarry(BaseModel):
     reasoning: str
     matched_skills: list[str]
     missing_skills: list[str]
+
+
 class Jobstreet:
-    
     def __init__(self):
         self._playwright = None
         self._context = None
         self.page: Page | None = None
 
-        #Page elements
+        # Page elements
         self.search: Locator | None = None
         self.seek_btn: Locator | None = None
         self.work_arrangement: Locator | None = None
@@ -40,7 +48,7 @@ class Jobstreet:
         self.listing_time: Locator | None = None
         self.listing_time_option: Locator | None = None
         self.run_summary: list[RunSummarry] = []
-        
+
     async def _persistent_browser_login(self):
         self._playwright = await async_playwright().start()
 
@@ -64,7 +72,7 @@ class Jobstreet:
         for page in list(self._context.pages):
             if page != new_tab:
                 await page.close()
-            
+
         self.page = await self._context.new_page()
         await new_tab.close()
         await self.page.goto(JOBSTREET_LINK)
@@ -73,19 +81,24 @@ class Jobstreet:
         """Wait for network idle
         :param duration: Integer in seconds
         """
-        await self.page.wait_for_load_state('networkidle')
+        await self.page.wait_for_load_state("networkidle")
         await self.page.wait_for_timeout(duration * 1000)
 
     async def _click_outside_modal(self):
         await self.page.locator("body").click(position={"x": 10, "y": 10})
 
-
-    
-    async def _search_and_filter_jobs(self, remote_only: bool = True, listing_time:int|str=3, keyword: str = "Software Engineer") -> list[Locator]:
+    async def _search_and_filter_jobs(
+        self,
+        remote_only: bool = True,
+        listing_time: int | str = 3,
+        keyword: str = "Software Engineer",
+    ) -> list[Locator]:
         self.search = self.page.locator("#keywords-input")
         search_input = self.page.locator("#keywords-input")
         if not await search_input.count() > 0:
-            await self.page.locator('[data-automation="minimisedSearchBarPlaceholder"]').click()
+            await self.page.locator(
+                '[data-automation="minimisedSearchBarPlaceholder"]'
+            ).click()
         await search_input.clear()
         await search_input.type(keyword, delay=50)
 
@@ -96,7 +109,11 @@ class Jobstreet:
         await self._wait_for_timeout()
 
         if remote_only:
-            self.work_arrangement = self.page.locator("div").filter(has_text=re.compile(r"^RemoteRemote$")).nth(1)
+            self.work_arrangement = (
+                self.page.locator("div")
+                .filter(has_text=re.compile(r"^RemoteRemote$"))
+                .nth(1)
+            )
             await expect(self.work_arrangement).to_be_visible()
             await self.work_arrangement.click()
             self.remote_option = self.page.get_by_role("checkbox", name="Remote")
@@ -105,89 +122,104 @@ class Jobstreet:
             await self._wait_for_timeout()
             await self._click_outside_modal()
 
-        self.listing_time = self.page.locator('[data-automation="toggleDateListedPanel"]').nth(1)
+        self.listing_time = self.page.locator(
+            '[data-automation="toggleDateListedPanel"]'
+        ).nth(1)
         await expect(self.listing_time).to_be_visible()
         await self.listing_time.click()
-        listing_time_name = f"Last {listing_time} days" if isinstance(listing_time, int) else listing_time
-        self.listing_time_option = self.page.get_by_role("radio", name=listing_time_name)
+        listing_time_name = (
+            f"Last {listing_time} days"
+            if isinstance(listing_time, int)
+            else listing_time
+        )
+        self.listing_time_option = self.page.get_by_role(
+            "radio", name=listing_time_name
+        )
         await expect(self.listing_time_option).to_be_visible()
         await self.listing_time_option.click()
-        await self._click_outside_modal()    
+        await self._click_outside_modal()
         await self._wait_for_timeout()
-        
+
         # jobs = self.page.get_by_test_id("job-list-item-link-overlay")
-        
+
     def _skip_this_job(self, job_description: str) -> bool:
-            keywords_to_skip = [
-                "intern",
-                "internship",
-                "java",
-                "c#",
-                ".net",
-                "ruby",
-                "perl",
-                "scala",
-                "rust",
-                "principal",
-                "salesforce developer",
-                "wordpress",
-                "powerapps",
-                "Kotlin",
-                "Swift",
-                "Objective-C",
-                "Elixir",
-                "Erlang",
-                "Groovy",
-                "COBOL",
-                "ABAP",
-                "Salesforce",
-                "ServiceNow",
-                "Service Now",
-                "QA Engineer",
-                "QA Tester",
-                "Manual Tester",
-                "Test Engineer",
-                "Data Analyst",
-                "Data Engineer",
-                "Business Analyst",
-                "Data Scientist",
-                "Network Engineer",
-                "Network Administrator",
-                "System Administrator",
-                "IT Support",
-                "Technical Support",
-                "Help Desk",
-            ]
+        keywords_to_skip = [
+            "intern",
+            "internship",
+            "java",
+            "c#",
+            ".net",
+            "ruby",
+            "perl",
+            "scala",
+            "rust",
+            "principal",
+            "salesforce developer",
+            "wordpress",
+            "powerapps",
+            "Kotlin",
+            "Swift",
+            "Objective-C",
+            "Elixir",
+            "Erlang",
+            "Groovy",
+            "COBOL",
+            "ABAP",
+            "Salesforce",
+            "ServiceNow",
+            "Service Now",
+            "QA Engineer",
+            "QA Tester",
+            "Manual Tester",
+            "Test Engineer",
+            "Data Analyst",
+            "Data Engineer",
+            "Business Analyst",
+            "Data Scientist",
+            "Network Engineer",
+            "Network Administrator",
+            "System Administrator",
+            "IT Support",
+            "Technical Support",
+            "Help Desk",
+        ]
 
-            companies_to_skip = [
-                "eclaro",
-                "hire feed",
-                "quik hire staffing",
-                "microsourcing",
-                "hunt st",
-                "crossing hurdles",
-                "crossover",
-                "micro1",
-                "bjak",
-                "ncs"
-                "white cloak",
-                "power mac"
-            ]
+        companies_to_skip = [
+            "eclaro",
+            "hire feed",
+            "quik hire staffing",
+            "microsourcing",
+            "hunt st",
+            "crossing hurdles",
+            "crossover",
+            "micro1",
+            "bjak",
+            "ncs",
+            "white cloak",
+            "power mac",
+        ]
 
-            description = job_description.lower()
+        description = job_description.lower()
 
-            return (
-                any(keyword.lower() in description for keyword in keywords_to_skip)
-                or any(company.lower() in description for company in companies_to_skip)
-            )
+        return any(
+            keyword.lower() in description for keyword in keywords_to_skip
+        ) or any(company.lower() in description for company in companies_to_skip)
 
-    
     async def automate_job_search(self):
         await self._persistent_browser_login()
-        search_keys = ["React", "Software Engineer", "Laravel",  "Node.js", "AWS",  "DevOps"]
+        search_keys = [
+            "React",
+            "Software Engineer",
+            "Laravel",
+            "Node.js",
+            "AWS",
+            "DevOps",
+        ]
 
-        for key in search_keys:  
-            await self._search_and_filter_jobs(keyword=key, remote_only=False, listing_time=7)
+        for key in search_keys:
+            await self._search_and_filter_jobs(
+                keyword=key, remote_only=False, listing_time=7
+            )
             has_next_page = await self.page.get_by_role("link", name="Next").count() > 0
             while has_next_page:
                 jobs = await self.page.get_by_test_id("job-card").all()
@@ -200,46 +232,83 @@ class Jobstreet:
                     job_card_content = await job.inner_text()
                     skip_job = self._skip_this_job(job_description=job_card_content)
                     salary_locator = job.locator('[data-automation="jobSalary"]').first
-                    job_salary = await salary_locator.inner_text() if await salary_locator.count() else ""
-                    
-                    job_listing_date = await job.locator('[data-automation="jobListingDate"]').nth(0).inner_text()
+                    job_salary = (
+                        await salary_locator.inner_text()
+                        if await salary_locator.count()
+                        else ""
+                    )
+
+                    job_listing_date = (
+                        await job.locator('[data-automation="jobListingDate"]')
+                        .nth(0)
+                        .inner_text()
+                    )
                     already_applied = "Applied" in job_listing_date
-                    already_saved = (await job.locator('[data-automation="remove-save-job"]').count()) > 0
+                    already_saved = (
+                        await job.locator('[data-automation="remove-save-job"]').count()
+                    ) > 0
                     viewed = "Viewed" in job_listing_date
-                    if already_applied or viewed or skip_job or already_saved or not salary_in_range(job_salary):
+                    if (
+                        already_applied
+                        or viewed
+                        or skip_job
+                        or already_saved
+                        or not salary_in_range(job_salary)
+                    ):
                         continue
-                    
+
                     await job.click()
                     await self._wait_for_timeout()
-                    
-                    job_details_section = self.page.locator('[data-automation="jobDetailsPage"]').nth(0)
+
+                    job_details_section = self.page.locator(
+                        '[data-automation="jobDetailsPage"]'
+                    ).nth(0)
                     await expect(job_details_section).to_be_visible()
-                    salary_range_element = job_details_section.locator('[data-automation="job-detail-salary"]')
-                    salary_range_inside_job_details = await salary_range_element.inner_text() if await salary_range_element.count() else ""
+                    salary_range_element = job_details_section.locator(
+                        '[data-automation="job-detail-salary"]'
+                    )
+                    salary_range_inside_job_details = (
+                        await salary_range_element.inner_text()
+                        if await salary_range_element.count()
+                        else ""
+                    )
                     if not salary_in_range(salary_range_inside_job_details):
                         continue
-                    quick_apply_btn = job_details_section.locator('[data-automation="job-detail-apply"]', has_text=re.compile(r"quick apply", re.I)).nth(0)
-                    external_apply_btn = job_details_section.locator('[data-automation="job-detail-apply"]', has_text=re.compile(r"apply", re.I)).nth(0)
+                    quick_apply_btn = job_details_section.locator(
+                        '[data-automation="job-detail-apply"]',
+                        has_text=re.compile(r"quick apply", re.I),
+                    ).nth(0)
+                    job_details_section.locator(
+                        '[data-automation="job-detail-apply"]',
+                        has_text=re.compile(r"apply", re.I),
+                    ).nth(0)
 
                     save_btn = job_details_section.get_by_test_id("jdv-savedjob").nth(0)
 
-                    if await quick_apply_btn.count() == 0 and await save_btn.count() == 0:
-                        print(f"Job has no quick apply or save button. Skipping.")
+                    if (
+                        await quick_apply_btn.count() == 0
+                        and await save_btn.count() == 0
+                    ):
+                        print("Job has no quick apply or save button. Skipping.")
                         continue
                     job_title_element = job_details_section.get_by_role("link").nth(0)
-                    if(not await job_title_element.inner_text()):
-                        job_title_element = job_details_section.get_by_role("link").nth(1)
-                    job_description_section = job_details_section.locator('[data-automation="jobAdDetails"]')
-                    
+                    if not await job_title_element.inner_text():
+                        job_title_element = job_details_section.get_by_role("link").nth(
+                            1
+                        )
+                    job_description_section = job_details_section.locator(
+                        '[data-automation="jobAdDetails"]'
+                    )
+
                     job_title = await job_title_element.inner_text()
                     job_description = await job_description_section.inner_text()
-                    
+
                     job_input = f"""Job Title: {job_title} \n
                     Job Description: \n {job_description}
                     """
 
                     already_saved = (await save_btn.inner_text()) == "Unsave"
-                    if(already_saved):
+                    if already_saved:
                         continue
 
                     result = None
@@ -247,12 +316,21 @@ class Jobstreet:
                     with trace(workflow_name="Job Search Automation"):
                         for attempt in range(max_retries + 1):
                             try:
-                                result = await Runner.run(starting_agent=job_analyzer_agent, input=job_input, max_turns=5)
+                                result = await Runner.run(
+                                    starting_agent=job_analyzer_agent,
+                                    input=job_input,
+                                    max_turns=5,
+                                )
                                 break
                             except openai.BadRequestError as e:
                                 result = None
-                                if "json_validate_failed" in str(e) and attempt < max_retries:
-                                    print(f"JSON validation failed for '{job_title}'. Retrying ({attempt + 1}/{max_retries})...")
+                                if (
+                                    "json_validate_failed" in str(e)
+                                    and attempt < max_retries
+                                ):
+                                    print(
+                                        f"JSON validation failed for '{job_title}'. Retrying ({attempt + 1}/{max_retries})..."
+                                    )
                                     continue
                                 print("Error occured job title:", job_title)
                                 print("Error", e)
@@ -268,12 +346,16 @@ class Jobstreet:
 
                     if result is None:
                         continue
-                    
+
                     await self._wait_for_timeout()
 
                     run_result = result.final_output.model_dump()
                     has_quick_apply_btn = await quick_apply_btn.count() > 0
-                    if not has_quick_apply_btn and run_result.get("match") is True and not already_saved:
+                    if (
+                        not has_quick_apply_btn
+                        and run_result.get("match") is True
+                        and not already_saved
+                    ):
                         await save_btn.click()
                         continue
                     if has_quick_apply_btn and run_result.get("match") is True:
@@ -281,10 +363,12 @@ class Jobstreet:
                             await quick_apply_btn.click()
                         new_tab = await new_page.value
                         await new_tab.wait_for_load_state("domcontentloaded")
-                        dont_include_a_cover_letter = new_tab.locator("label").filter(has_text="Don't include a cover letter")
+                        dont_include_a_cover_letter = new_tab.locator("label").filter(
+                            has_text="Don't include a cover letter"
+                        )
                         await dont_include_a_cover_letter.click()
                         continue_btn = new_tab.get_by_test_id("continue-button")
-                        
+
                         while await continue_btn.count() > 0:
                             await continue_btn.nth(0).click()
                             print("Clicked continue button")
@@ -297,64 +381,107 @@ class Jobstreet:
                             print("Has errors:", has_errors)
                             if has_errors:
                                 form = new_tab.locator("form").nth(0)
-                                form_html_string = await form.evaluate("element => element.outerHTML")
-                                simplified_form_html = extract_required_fields(html= form_html_string, required_fields=error_msgs)
-                                print("Simplified form html string", simplified_form_html)
+                                form_html_string = await form.evaluate(
+                                    "element => element.outerHTML"
+                                )
+                                simplified_form_html = extract_required_fields(
+                                    html=form_html_string, required_fields=error_msgs
+                                )
+                                print(
+                                    "Simplified form html string", simplified_form_html
+                                )
                                 print("Required fields", error_msgs)
                                 await new_tab.pause()
-                                
+
                                 with trace(workflow_name="Field Locator"):
                                     try:
                                         agent_input = f"""
                                                             Required fields: {", ".join(error_msgs)}
                                                             Raw HTML Form: {simplified_form_html}
                                                         """
-                                        locator_result = await Runner.run(starting_agent=fields_extractor_agent, input=agent_input)
-                                        locators = locator_result.final_output.model_dump()["fields"]
+                                        locator_result = await Runner.run(
+                                            starting_agent=fields_extractor_agent,
+                                            input=agent_input,
+                                        )
+                                        locators = (
+                                            locator_result.final_output.model_dump()[
+                                                "fields"
+                                            ]
+                                        )
                                         pprint(locators)
 
-                                        agent_answers = await Runner.run(starting_agent=form_evaluator, input=json.dumps(locators))
-                                        answers_dump = agent_answers.final_output.model_dump()["fields"]
-                                        answers = {item["field"]: item["answer"] for item in answers_dump}
+                                        agent_answers = await Runner.run(
+                                            starting_agent=form_evaluator,
+                                            input=json.dumps(locators),
+                                        )
+                                        answers_dump = (
+                                            agent_answers.final_output.model_dump()[
+                                                "fields"
+                                            ]
+                                        )
+                                        answers = {
+                                            item["field"]: item["answer"]
+                                            for item in answers_dump
+                                        }
 
                                         print("Answers:", answers)
                                         for field in locators:
-                                            field_answer = answers.get(field["field_name"])
+                                            field_answer = answers.get(
+                                                field["field_name"]
+                                            )
                                             match field["field_type"]:
                                                 case "select":
-                                                    select_element = new_tab.locator(field["locator"])
-                                                    await select_element.select_option(field_answer["label"])
-                                            
+                                                    select_element = new_tab.locator(
+                                                        field["locator"]
+                                                    )
+                                                    await select_element.select_option(
+                                                        field_answer["label"]
+                                                    )
+
                                                 case "checkbox" | "checkboxes":
                                                     answers = field_answer["locator"]
                                                     answer_list = answers.split(", ")
                                                     for answer in answer_list:
-                                                        checkbox_element = new_tab.locator(answer)
+                                                        checkbox_element = (
+                                                            new_tab.locator(answer)
+                                                        )
                                                         await checkbox_element.check()
                                                 case "radio":
-                                                    radio_element = new_tab.locator(field_answer["locator"])
+                                                    radio_element = new_tab.locator(
+                                                        field_answer["locator"]
+                                                    )
                                                     await radio_element.click()
-                                                case "textarea":
-                                                    text_area_element = new_tab.locator(field_answer["locator"])
-                                                    await text_area_element.fill(field_answer["label"])
+                                                case "textarea" | "text":
+                                                    text_area_element = new_tab.locator(
+                                                        field_answer["locator"]
+                                                    )
+                                                    await text_area_element.fill(
+                                                        field_answer["label"]
+                                                    )
+
                                     except openai.BadRequestError as e:
                                         print("Model error", e)
                                         continue
                                     except Exception as e:
                                         print("Something went wrong", e)
                                         continue
-                        await new_tab.get_by_test_id("review-submit-application").click()
+                        await new_tab.get_by_test_id(
+                            "review-submit-application"
+                        ).click()
                         await new_tab.wait_for_load_state("networkidle")
                         await new_tab.wait_for_timeout(2000)
                         await new_tab.close()
-                        self.run_summary.append(RunSummarry(job_title=job_title,
-                                                            job_description=job_description,
-                                                            match=run_result["match"],
-                                                            percentage=run_result["percentage"],
-                                                            reasoning=run_result["reasoning"],
-                                                            matched_skills=run_result["matched_skills"],
-                                                            missing_skills=run_result["missing_skills"]
-                                                            ))
+                        self.run_summary.append(
+                            RunSummarry(
+                                job_title=job_title,
+                                job_description=job_description,
+                                match=run_result["match"],
+                                percentage=run_result["percentage"],
+                                reasoning=run_result["reasoning"],
+                                matched_skills=run_result["matched_skills"],
+                                missing_skills=run_result["missing_skills"],
+                            )
+                        )
 
                 next_btn = self.page.get_by_role("link", name="Next")
                 if await next_btn.count() == 0:
@@ -363,8 +490,8 @@ class Jobstreet:
                 await self._wait_for_timeout()
                 # with open("output.json", "w", encoding="utf-8") as f:
                 #     json.dump([summary.model_dump() for summary in self.run_summary], f, indent=4, ensure_ascii=False )
-                
-        await self._clean_up() 
+
+        await self._clean_up()
 
     async def _clean_up(self):
         if self._context:

@@ -39,7 +39,10 @@ INSTRUCTIONS = """
     all user-interactable form fields.
 
     Your output MUST follow the provided structured output schema.
-    ## NOTE: Only answer required fields - leave the fields that  already have answers
+    ## NOTE: Extract EVERY interactable field present in the HTML, including
+    fields that already have a selected/checked/filled value. A field
+    already having a value does not mean it was accepted - it may need to
+    be re-answered, so it must still be included in the output.
     ## OBJECTIVE
 
     For every relevant form field, identify:
