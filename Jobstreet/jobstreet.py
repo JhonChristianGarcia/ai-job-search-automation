@@ -1,21 +1,21 @@
 import asyncio
 import re
-from pathlib import Path
 from pprint import pprint
 
 from agents import Runner, trace
 from dotenv import load_dotenv
-from playwright.async_api import Locator, Page, async_playwright, expect
+from playwright.async_api import Locator, Page, expect
 from pydantic import BaseModel
 
 from custom_agents.form_evaluator import form_evaluator
 from custom_agents.form_fields_extractor import fields_extractor_agent
-from custom_agents.job_analyzer import job_analyzer_agent
 
 load_dotenv(override=True)
 import json
 
 import openai
+
+from base_page import BasePage
 
 # from utils.html_simplifier import simplify_form_html
 from utils.extract_required_fields import extract_required_fields
@@ -34,7 +34,7 @@ class RunSummarry(BaseModel):
     missing_skills: list[str]
 
 
-class Jobstreet:
+class Jobstreet(BasePage):
     def __init__(self):
         self._playwright = None
         self._context = None
@@ -48,34 +48,6 @@ class Jobstreet:
         self.listing_time: Locator | None = None
         self.listing_time_option: Locator | None = None
         self.run_summary: list[RunSummarry] = []
-
-    async def _persistent_browser_login(self):
-        self._playwright = await async_playwright().start()
-
-        user_data_dir = Path(
-            r"C:\Users\xtian\AppData\Local\BraveSoftware\Brave-Browser\PlaywrightProfile"
-        )
-
-        executable_path = (
-            r"C:\Program Files\BraveSoftware"
-            r"\Brave-Browser\Application\brave.exe"
-        )
-
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            user_data_dir=str(user_data_dir),
-            executable_path=executable_path,
-            headless=False,
-        )
-
-        new_tab = await self._context.new_page()
-
-        for page in list(self._context.pages):
-            if page != new_tab:
-                await page.close()
-
-        self.page = await self._context.new_page()
-        await new_tab.close()
-        await self.page.goto(JOBSTREET_LINK)
 
     async def _wait_for_timeout(self, duration: int = 1):
         """Wait for network idle
@@ -206,10 +178,12 @@ class Jobstreet:
         ) or any(company.lower() in description for company in companies_to_skip)
 
     async def automate_job_search(self):
-        await self._persistent_browser_login()
+        await self.persistent_browser_login(JOBSTREET_LINK)
+
         search_keys = [
-            "React",
             "Software Engineer",
+            "Software Developer",
+            "React",
             "Laravel",
             "Node.js",
             "AWS",
@@ -248,11 +222,13 @@ class Jobstreet:
                         await job.locator('[data-automation="remove-save-job"]').count()
                     ) > 0
                     viewed = "Viewed" in job_listing_date
+                    started_applying = "Started applying" in job_listing_date
                     if (
                         already_applied
                         or viewed
                         or skip_job
                         or already_saved
+                        or started_applying
                         or not salary_in_range(job_salary)
                     ):
                         continue
@@ -300,60 +276,30 @@ class Jobstreet:
                         '[data-automation="jobAdDetails"]'
                     )
 
-                    job_title = await job_title_element.inner_text()
-                    job_description = await job_description_section.inner_text()
-
-                    job_input = f"""Job Title: {job_title} \n
-                    Job Description: \n {job_description}
-                    """
-
                     already_saved = (await save_btn.inner_text()) == "Unsave"
                     if already_saved:
                         continue
 
-                    result = None
-                    max_retries = 2
-                    with trace(workflow_name="Job Search Automation"):
-                        for attempt in range(max_retries + 1):
-                            try:
-                                result = await Runner.run(
-                                    starting_agent=job_analyzer_agent,
-                                    input=job_input,
-                                    max_turns=5,
-                                )
-                                break
-                            except openai.BadRequestError as e:
-                                result = None
-                                if (
-                                    "json_validate_failed" in str(e)
-                                    and attempt < max_retries
-                                ):
-                                    print(
-                                        f"JSON validation failed for '{job_title}'. Retrying ({attempt + 1}/{max_retries})..."
-                                    )
-                                    continue
-                                print("Error occured job title:", job_title)
-                                print("Error", e)
-                            except KeyError as ke:
-                                result = None
-                                print(f"Missing key error {ke}")
-                                break
-                            except Exception as e:
-                                result = None
-                                print("Error occured job title:", job_title)
-                                print("Error", e)
-                                break
+                    job_title = await job_title_element.inner_text()
+                    job_description = await job_description_section.inner_text()
 
-                    if result is None:
+                    job_evaluation_result = await self.evaluate_job(
+                        job_title=job_title,
+                        job_description=job_description,
+                        workflow_name="Jobstreet Job Evaluation",
+                    )
+
+                    if job_evaluation_result is None:
                         continue
 
                     await self._wait_for_timeout()
 
-                    run_result = result.final_output.model_dump()
+                    run_result = job_evaluation_result.final_output.model_dump()
                     has_quick_apply_btn = await quick_apply_btn.count() > 0
                     if (
                         not has_quick_apply_btn
                         and run_result.get("match") is True
+                        and run_result.get("percentage") >= 80
                         and not already_saved
                     ):
                         await save_btn.click()
@@ -387,11 +333,6 @@ class Jobstreet:
                                 simplified_form_html = extract_required_fields(
                                     html=form_html_string, required_fields=error_msgs
                                 )
-                                print(
-                                    "Simplified form html string", simplified_form_html
-                                )
-                                print("Required fields", error_msgs)
-                                await new_tab.pause()
 
                                 with trace(workflow_name="Field Locator"):
                                     try:
@@ -462,7 +403,7 @@ class Jobstreet:
                                     except openai.BadRequestError as e:
                                         print("Model error", e)
                                         continue
-                                    except Exception as e:
+                                    except Exception as e:  # noqa: BLE001 Ruff comment
                                         print("Something went wrong", e)
                                         continue
                         await new_tab.get_by_test_id(
@@ -492,13 +433,6 @@ class Jobstreet:
                 #     json.dump([summary.model_dump() for summary in self.run_summary], f, indent=4, ensure_ascii=False )
 
         await self._clean_up()
-
-    async def _clean_up(self):
-        if self._context:
-            await self._context.close()
-
-        if self._playwright:
-            await self._playwright.stop()
 
 
 if __name__ == "__main__":

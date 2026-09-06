@@ -9,7 +9,6 @@ from playwright.async_api import Locator
 from base_page import BasePage
 from custom_agents.form_evaluator import form_evaluator
 from custom_agents.form_fields_extractor import fields_extractor_agent
-from custom_agents.job_analyzer import job_analyzer_agent
 from utils.alert_for_unknown_question import alert_for_unknown_answer
 from utils.indeed_fields_extractor import extract_all_form_fields
 from utils.salary_in_range import salary_in_range
@@ -57,10 +56,11 @@ class Indeed(BasePage):
         await self.persistent_browser_login(INDEED_PAGE_LINK)
 
         search_keys = [
-            "Node.js",
-            "Laravel",
-            "React",
             "Software Engineer",
+            "Software Developer",
+            "React",
+            "Laravel",
+            "Node.js",
             "AWS",
             "DevOps",
         ]
@@ -68,7 +68,7 @@ class Indeed(BasePage):
             await self._search_and_filter(keyword=key)
 
             job_scroll_pane = self.page.locator(".jobsearch-LeftPane")
-
+            await self.page.pause()
             while True:
                 job_cards = job_scroll_pane.locator(
                     '[data-testid="slider_container"]:not([aria-hidden="true"])'
@@ -79,7 +79,10 @@ class Indeed(BasePage):
                     print("No jobs found")
                     break
                 print(f"Found {total_jobs} jobs on this page")
-                for i, job in enumerate(jobs, start=1):
+                for job in jobs:
+                    save_job_toggle = job.get_by_role("listitem").get_by_role(
+                        "button", name="Save job Toggle", pressed=False
+                    )
                     job_quick_details = await job.inner_text()
                     salary_range_element = job.locator(
                         "[data-testid~='salary-snippet-container']"
@@ -89,7 +92,7 @@ class Indeed(BasePage):
                         if await salary_range_element.count() > 0
                         else ""
                     )
-                    print("SALARY RANGE", salary_range)
+
                     if (
                         self._skip_this_job(job_quick_details)
                         or not salary_in_range(salary_range)
@@ -125,40 +128,15 @@ class Indeed(BasePage):
                         .inner_text()
                     )
 
-                    job_input = f"""Job Title: {job_title} \n
-                                        Job Description: \n {job_description}
-                                        """
-                    result = None
-                    max_retries = 2
-                    with trace(workflow_name="Job Search Automation"):
-                        for attempt in range(max_retries + 1):
-                            try:
-                                result = await Runner.run(
-                                    starting_agent=job_analyzer_agent,
-                                    input=job_input,
-                                    max_turns=5,
-                                )
-                                break
-                            except openai.BadRequestError as e:
-                                result = None
-                                if (
-                                    "json_validate_failed" in str(e)
-                                    and attempt < max_retries
-                                ):
-                                    print(
-                                        f"JSON validation failed for '{job_title}'. Retrying ({attempt + 1}/{max_retries})..."
-                                    )
-                                    continue
-                                print("Error occured job title:", job_title)
-                                print("Error", e)
-                            except KeyError as ke:
-                                result = None
-                                print(f"Missing key error {ke}")
-                                break
+                    job_evaluation_result = await self.evaluate_job(
+                        job_title=job_title,
+                        job_description=job_description,
+                        workflow_name="Indeed Job Evaluation",
+                    )
 
-                    if result is None:
+                    if job_evaluation_result is None:
                         continue
-                    run_result = result.final_output.model_dump()
+                    run_result = job_evaluation_result.final_output.model_dump()
 
                     if run_result.get("match") is False:
                         continue
@@ -192,7 +170,6 @@ class Indeed(BasePage):
                                 simplified_form_html = extract_all_form_fields(
                                     form_html_string,
                                 )
-                                print(simplified_form_html)
 
                                 with trace(workflow_name="Field Locator"):
                                     try:
@@ -229,7 +206,9 @@ class Indeed(BasePage):
                                             for answer in answers.values()
                                         ):
                                             alert_for_unknown_answer()
-                                            await new_tab.pause()
+                                            if await save_job_toggle.count() > 0:
+                                                await save_job_toggle.click()
+                                            continue
 
                                         print("Answers:", answers)
                                         for field in locators:
@@ -293,6 +272,9 @@ class Indeed(BasePage):
                                     except openai.BadRequestError as e:
                                         print("Model error", e)
                                         continue
+                                    except Exception as error:  # noqa: BLE001 - Comment for ruff
+                                        print(f"Unhandled error {error}")
+                                        continue
                         await new_tab.get_by_test_id(
                             "submit-application-button"
                         ).click()
@@ -305,7 +287,7 @@ class Indeed(BasePage):
                 await next_btn.click()
                 await self.wait_for_timeout(2)
 
-        await self.page.pause()
+        await self._clean_up()
 
 
 if __name__ == "__main__":
