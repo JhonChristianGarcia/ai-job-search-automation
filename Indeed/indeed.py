@@ -68,7 +68,6 @@ class Indeed(BasePage):
             await self._search_and_filter(keyword=key)
 
             job_scroll_pane = self.page.locator(".jobsearch-LeftPane")
-            await self.page.pause()
             while True:
                 job_cards = job_scroll_pane.locator(
                     '[data-testid="slider_container"]:not([aria-hidden="true"])'

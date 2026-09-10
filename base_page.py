@@ -17,11 +17,13 @@ class BasePage:
     async def handle_new_tab(self, new_tab):
         await Stealth().apply_stealth_async(new_tab)
 
-    async def persistent_browser_login(self, page_link: str):
+    async def persistent_browser_login(
+        self, page_link: str, profile: str = "PlaywrightProfile"
+    ):
         self._playwright = await async_playwright().start()
 
         user_data_dir = Path(
-            r"C:\Users\xtian\AppData\Local\BraveSoftware\Brave-Browser\PlaywrightProfile"
+            rf"C:\Users\xtian\AppData\Local\BraveSoftware\Brave-Browser\{profile}"
         )
 
         executable_path = (
@@ -104,8 +106,12 @@ class BasePage:
             "crossover",
             "micro1",
             "bjak",
-            "ncswhite cloak",
+            "ncs philippines",
+            "yondu",
+            "white cloak",
             "power mac",
+            "lago",
+            "ncs group",
         ]
 
         description = job_description.lower()

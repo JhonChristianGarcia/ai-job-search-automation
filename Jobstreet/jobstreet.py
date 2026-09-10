@@ -53,7 +53,7 @@ class Jobstreet(BasePage):
         """Wait for network idle
         :param duration: Integer in seconds
         """
-        await self.page.wait_for_load_state("networkidle")
+        # await self.page.wait_for_load_state("networkidle")
         await self.page.wait_for_timeout(duration * 1000)
 
     async def _click_outside_modal(self):
@@ -72,6 +72,7 @@ class Jobstreet(BasePage):
                 '[data-automation="minimisedSearchBarPlaceholder"]'
             ).click()
         await search_input.clear()
+        print(f"Searching for {keyword}")
         await search_input.type(keyword, delay=50)
 
         self.seek_btn = self.page.get_by_role("button", name="Submit search")
@@ -114,85 +115,24 @@ class Jobstreet(BasePage):
 
         # jobs = self.page.get_by_test_id("job-list-item-link-overlay")
 
-    def _skip_this_job(self, job_description: str) -> bool:
-        keywords_to_skip = [
-            "intern",
-            "internship",
-            "java",
-            "c#",
-            ".net",
-            "ruby",
-            "perl",
-            "scala",
-            "rust",
-            "principal",
-            "salesforce developer",
-            "wordpress",
-            "powerapps",
-            "Kotlin",
-            "Swift",
-            "Objective-C",
-            "Elixir",
-            "Erlang",
-            "Groovy",
-            "COBOL",
-            "ABAP",
-            "Salesforce",
-            "ServiceNow",
-            "Service Now",
-            "QA Engineer",
-            "QA Tester",
-            "Manual Tester",
-            "Test Engineer",
-            "Data Analyst",
-            "Data Engineer",
-            "Business Analyst",
-            "Data Scientist",
-            "Network Engineer",
-            "Network Administrator",
-            "System Administrator",
-            "IT Support",
-            "Technical Support",
-            "Help Desk",
-        ]
-
-        companies_to_skip = [
-            "eclaro",
-            "hire feed",
-            "quik hire staffing",
-            "microsourcing",
-            "hunt st",
-            "crossing hurdles",
-            "crossover",
-            "micro1",
-            "bjak",
-            "ncs",
-            "white cloak",
-            "power mac",
-        ]
-
-        description = job_description.lower()
-
-        return any(
-            keyword.lower() in description for keyword in keywords_to_skip
-        ) or any(company.lower() in description for company in companies_to_skip)
-
     async def automate_job_search(self):
-        await self.persistent_browser_login(JOBSTREET_LINK)
+        await self.persistent_browser_login(
+            page_link=JOBSTREET_LINK, profile="JobstreetProfile"
+        )
 
         search_keys = [
+            "Node.js",
+            "Laravel",
             "Software Engineer",
             "Software Developer",
             "React",
-            "Laravel",
-            "Node.js",
             "AWS",
             "DevOps",
         ]
 
         for key in search_keys:
             await self._search_and_filter_jobs(
-                keyword=key, remote_only=False, listing_time=7
+                keyword=key, remote_only=False, listing_time=3
             )
             has_next_page = await self.page.get_by_role("link", name="Next").count() > 0
             while has_next_page:
@@ -391,6 +331,7 @@ class Jobstreet(BasePage):
                                                     radio_element = new_tab.locator(
                                                         field_answer["locator"]
                                                     )
+                                                    await radio_element.scroll_into_view_if_needed()
                                                     await radio_element.click()
                                                 case "textarea" | "text":
                                                     text_area_element = new_tab.locator(

@@ -55,8 +55,8 @@ def extract_required_fields(
         "checked",
         "disabled",
     }
-    question_element = None
-    question_text = None
+    matched = []
+    matched_required = set()
 
     for element in soup.find_all(["strong", "legend", "label"]):
         text = element.get_text(" ", strip=True)
@@ -66,136 +66,133 @@ def extract_required_fields(
 
         normalized = normalize(text)
 
-        for required_question in required:
+        if normalized in required and normalized not in matched_required:
+            matched.append((element, text))
+            matched_required.add(normalized)
 
-            if normalized == required_question:
-                question_element = element
-                question_text = text
-                break
-
-        if question_element:
+        if len(matched_required) == len(required):
             break
 
-    if not question_element:
+    if not matched:
         return "<form></form>"
-
-
-    container = question_element
-
-    while container.parent and isinstance(container.parent, Tag):
-
-        parent = container.parent
-
-        controls = parent.find_all(
-            ["input", "select", "textarea"],
-        )
-
-        if controls:
-            container = parent
-
-       
-            if len(controls) >= 1:
-                break
-
-        container = parent
-
 
     output = BeautifulSoup("<form></form>", "html.parser")
     form = output.form
 
-    field = output.new_tag("div")
+    for question_element, question_text in matched:
 
-    question = output.new_tag("label")
-    question.string = question_text
-    field.append(question)
+        container = question_element
+
+        while container.parent and isinstance(container.parent, Tag):
+
+            parent = container.parent
+
+            controls = parent.find_all(
+                ["input", "select", "textarea"],
+            )
+
+            if controls:
+                container = parent
 
 
-    controls = container.find_all(
-        ["input", "select", "textarea"]
-    )
+                if len(controls) >= 1:
+                    break
 
-    seen = set()
+            container = parent
 
-    for control in controls:
+        field = output.new_tag("div")
 
-        key = (
-            control.get("id")
-            or control.get("name")
-            or str(control)
+        question = output.new_tag("label")
+        question.string = question_text
+        field.append(question)
+
+
+        controls = container.find_all(
+            ["input", "select", "textarea"]
         )
 
-        if key in seen:
-            continue
+        seen = set()
 
-        seen.add(key)
+        for control in controls:
 
-        new_control = output.new_tag(control.name)
+            key = (
+                control.get("id")
+                or control.get("name")
+                or str(control)
+            )
 
-        for attr in locator_attrs:
-
-            if attr not in control.attrs:
+            if key in seen:
                 continue
 
-            value = control.attrs[attr]
+            seen.add(key)
 
-            if isinstance(value, list):
-                value = " ".join(value)
+            new_control = output.new_tag(control.name)
 
-            new_control[attr] = value
+            for attr in locator_attrs:
 
-        if control.name == "select":
+                if attr not in control.attrs:
+                    continue
 
-            for option in control.find_all("option"):
+                value = control.attrs[attr]
 
-                new_option = output.new_tag("option")
+                if isinstance(value, list):
+                    value = " ".join(value)
 
-                if option.get("value") is not None:
-                    new_option["value"] = option["value"]
+                new_control[attr] = value
 
-                if option.get("disabled") is not None:
-                    new_option["disabled"] = ""
+            if control.name == "select":
 
-                if option.get("selected") is not None:
-                    new_option["selected"] = ""
+                for option in control.find_all("option"):
 
-                new_option.string = option.get_text(
-                    " ",
-                    strip=True,
+                    new_option = output.new_tag("option")
+
+                    if option.get("value") is not None:
+                        new_option["value"] = option["value"]
+
+                    if option.get("disabled") is not None:
+                        new_option["disabled"] = ""
+
+                    if option.get("selected") is not None:
+                        new_option["selected"] = ""
+
+                    new_option.string = option.get_text(
+                        " ",
+                        strip=True,
+                    )
+
+                    new_control.append(new_option)
+
+            elif control.name == "textarea":
+
+                new_control.string = control.get_text(
+                    strip=True
                 )
 
-                new_control.append(new_option)
-
-        elif control.name == "textarea":
-
-            new_control.string = control.get_text(
-                strip=True
-            )
-
-        field.append(new_control)
+            field.append(new_control)
 
 
-        control_id = control.get("id")
+            control_id = control.get("id")
 
-        if control_id:
+            if control_id:
 
-            label = container.find(
-                "label",
-                attrs={"for": control_id},
-            )
-
-            if label:
-
-                label_text = label.get_text(
-                    " ",
-                    strip=True,
+                label = container.find(
+                    "label",
+                    attrs={"for": control_id},
                 )
 
-                if label_text:
+                if label:
 
-                    option = output.new_tag("span")
-                    option.string = label_text
-                    field.append(option)
+                    label_text = label.get_text(
+                        " ",
+                        strip=True,
+                    )
 
-    form.append(field)
+                    if label_text:
+
+                        option = output.new_tag("span")
+                        option.string = label_text
+                        field.append(option)
+
+        form.append(field)
 
     return str(output)

@@ -1,4 +1,4 @@
-#!/bin/bash
+c#!/bin/bash
 
 cd /c/Users/xtian/AppData/Local/BraveSoftware/Brave-Browser
 pwd

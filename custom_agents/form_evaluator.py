@@ -80,6 +80,10 @@ additional_context = f"""
 
     What's your english proficiency level? (e.g. Basic, Intermediate, Advanced, Fluent): Fluent
     - C1
+    What's your native language?
+    - Filipino/Tagalog
+    What's your nationality?
+    - Filipino
 
     Are you able to work graveyard shifts? Yes
     Are you ammable to work on US/AU/EU timezones? Yes
@@ -464,6 +468,8 @@ form_evaluator = Agent(
         timeout=10_000,
     ),
 )
+
+
 async def test_model():
 
     result = await Runner.run(
