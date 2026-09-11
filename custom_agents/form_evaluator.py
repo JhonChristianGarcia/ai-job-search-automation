@@ -1,21 +1,13 @@
 import asyncio
-from datetime import date
 
 from agents import Agent, ModelSettings, Runner
 from agents.extensions.models.litellm_model import LitellmModel
 from pydantic import BaseModel
 
+from context.additional_context import additional_context
 from context.context import resume
-from utils.alert_for_unknown_question import alert_for_unknown_answer
 
 GPT_MODEL = "gpt-4o"
-
-local_qwen_coder_model = LitellmModel(
-    model="lm_studio/qwen/qwen2.5-coder-3b-instruct",
-    api_key="lm-studio",
-    base_url="http://127.0.0.1:1234/v1",
-)
-
 
 macbook_pro_qwen_3_5_9b_model = LitellmModel(
     model="lm_studio/qwen3.5-9b-instruct-pure",
@@ -23,74 +15,6 @@ macbook_pro_qwen_3_5_9b_model = LitellmModel(
     base_url="http://192.168.0.154:1234/v1",
 )
 
-
-additional_context = f"""
-    Portfolio link: https://www.jhonchristiangarcia.dev/
-    Linkedin profile: https://www.linkedin.com/in/jhonchristiangarcia/
-    Mobile number: +63 910 785 7097
-    
-    Expected monthly salary: PHP90,000 [If the field is a select field, choose the closest option to this range or if it is a USD field convert it to USD using PHP60 = USD1]
-    Previous salary: PHP60,000
-    Willing to work remotely: Yes
-    Willing to work full on-site: No
-    Willing to work hybrid: Yes
-
-    If asked for availability for an interview/call
-    Given the current date {date.today()} add 3 days and time availability is 5:00 PM - 9:00 PM
-    Give this format ex: Sept 09, 2026 - 5:00 PM, Sept 10, 2026 - 5:00 PM, Sept 11, 2026 - 5:00 PM
-    Total years of experience: 3+ years (5+ years including freelance/personal projects)
-        Full-stack engineering: 3 years
-        Backend engineering: 3 years
-        Frontend engineering: 3 years
-        Database engineering: 3 years
-        AI/ML engineering: 1 year
-        Python: 2 years
-        FastAPI: 1 year
-        TypeScript: 3 years
-        React: 3 years
-        React Native: 2 years
-        Node.js: 3 years
-        JavaScript: 3 years
-        Laravel: 3 years
-        PostgreSQL: 3 years
-        REST APIs: 3 years
-        GraphQL: 1 year
-        GCP: 1 year
-        AWS: 1 year
-        CI/CD: 1 year
-        Terraform: 1 year
-        Docker: 1 year
-        PostgreSQL: 3 years
-        MySQL: 3 years
-        
-    If the candidate's experience is not explicitly provided:
-    - Do not invent an experience value.
-    - If the question provides selectable options, choose the most conservative answer supported by the available context.
-    How much notice period is required before starting a new job: 1 month
-
-    Do you have experience automating functional and non-functional tests? Yes
-
-    Which tools or apps are you familiar with or use on your daily work? (e.g. Jira, Confluence, Slack, Trello, Asana, Notion, etc.): 
-    - Jira
-    - Confluence
-    - Slack
-    - Postman
-    - Jetbrains IDEs (PyCharm, WebStorm, IntelliJ IDEA)
-    - VS Code
-
-
-    What's your english proficiency level? (e.g. Basic, Intermediate, Advanced, Fluent): Fluent
-    - C1
-    What's your native language?
-    - Filipino/Tagalog
-    What's your nationality?
-    - Filipino
-
-    Are you able to work graveyard shifts? Yes
-    Are you ammable to work on US/AU/EU timezones? Yes
-    Where are you currently located? (City, Country): Malolos Bulacan, Philippines
-    Are you legally authorized to work in the Philippines? Yes
-"""
 
 INSTRUCTIONS = f"""
 
@@ -122,7 +46,7 @@ Resume:
 
 Additional Context:
 
-{additional_context}
+{additional_context()}
 
 GENERAL RULES:
 
