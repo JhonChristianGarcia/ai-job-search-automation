@@ -48,6 +48,7 @@ additional_context = f"""
         FastAPI: 1 year
         TypeScript: 3 years
         React: 3 years
+        React Native: 2 years
         Node.js: 3 years
         JavaScript: 3 years
         Laravel: 3 years

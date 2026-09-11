@@ -5,10 +5,17 @@ from bs4 import BeautifulSoup, Tag
 
 def extract_all_form_fields(html: str) -> str:
     """
-    Extracts all form fields, input controls, labels, and relevant
-    helper/error text from the HTML.
+    Extract all form fields and relevant metadata into a simplified HTML
+    representation suitable for an LLM.
 
-    Discards classes, layout wrappers, SVGs, and unnecessary clutter.
+    Preserves:
+    - labels
+    - stable locator attributes
+    - aria-describedby relationships
+    - validation/error messages
+    - helper text
+    - select options
+    - current values
     """
 
     soup = BeautifulSoup(html, "html.parser")
@@ -49,6 +56,10 @@ def extract_all_form_fields(html: str) -> str:
 
         field_div = output.new_tag("div")
 
+        # ---------------------------------------------------------
+        # FIELD LABEL
+        # ---------------------------------------------------------
+
         label_text = None
         control_id = control.get("id")
 
@@ -64,6 +75,7 @@ def extract_all_form_fields(html: str) -> str:
                     strip=True,
                 )
 
+        # Fallback: search parent containers.
         if not label_text:
             container = control
 
@@ -93,9 +105,12 @@ def extract_all_form_fields(html: str) -> str:
 
             new_label = output.new_tag("label")
             new_label.string = label_text
+
             field_div.append(new_label)
 
-        described_text = []
+        # ---------------------------------------------------------
+        # ARIA DESCRIBEDBY
+        # ---------------------------------------------------------
 
         aria_describedby = control.get(
             "aria-describedby",
@@ -115,21 +130,47 @@ def extract_all_form_fields(html: str) -> str:
                 strip=True,
             )
 
-            if text:
-                text = re.sub(
-                    r"\s+",
-                    " ",
-                    text,
-                ).strip()
+            if not text:
+                continue
 
-                described_text.append(text)
+            text = re.sub(
+                r"\s+",
+                " ",
+                text,
+            ).strip()
 
-        if described_text:
-            helper_div = output.new_tag("div")
-            helper_div["data-context"] = " ".join(described_text)
-            helper_div.string = " ".join(described_text)
+            context_div = output.new_tag("div")
 
-            field_div.append(helper_div)
+            # IMPORTANT:
+            # Preserve the referenced ID.
+            context_div["id"] = described_id
+
+            described_id_lower = described_id.lower()
+
+            # Explicitly classify the metadata.
+            if any(
+                keyword in described_id_lower
+                for keyword in (
+                    "error",
+                    "validation",
+                    "invalid",
+                )
+            ):
+                context_div["data-validation-message"] = "true"
+
+            elif "helper" in described_id_lower:
+                context_div["data-helper-text"] = "true"
+
+            else:
+                context_div["data-describedby"] = "true"
+
+            context_div.string = text
+
+            field_div.append(context_div)
+
+        # ---------------------------------------------------------
+        # CONTROL
+        # ---------------------------------------------------------
 
         new_control = output.new_tag(control.name)
 
@@ -143,6 +184,10 @@ def extract_all_form_fields(html: str) -> str:
                 val = " ".join(val)
 
             new_control[attr] = val
+
+        # ---------------------------------------------------------
+        # SELECT OPTIONS
+        # ---------------------------------------------------------
 
         if control.name == "select":
             for option in control.find_all("option"):
@@ -163,6 +208,10 @@ def extract_all_form_fields(html: str) -> str:
                 )
 
                 new_control.append(new_option)
+
+        # ---------------------------------------------------------
+        # TEXTAREA VALUE
+        # ---------------------------------------------------------
 
         elif control.name == "textarea":
             new_control.string = control.get_text(strip=True)

@@ -4,7 +4,7 @@ from pprint import pprint
 
 import openai
 from agents import Runner, trace
-from playwright.async_api import Locator
+from playwright.async_api import Locator, Page
 
 from base_page import BasePage
 from custom_agents.form_evaluator import form_evaluator
@@ -52,19 +52,129 @@ class Indeed(BasePage):
         await self.page.get_by_role("button", name="Update").nth(0).click()
         await self.wait_for_timeout()
 
-    async def automate_job_search(self):
-        await self.persistent_browser_login(INDEED_PAGE_LINK)
+    async def _answer_form_questions(
+        self, simplified_form_html: str, new_tab: Page
+    ) -> bool:
+        max_retries = 1
+        error = None
 
-        search_keys = [
-            "Software Engineer",
-            "Software Developer",
-            "React",
-            "Laravel",
-            "Node.js",
-            "AWS",
-            "DevOps",
-        ]
-        for key in search_keys:
+        for attempt in range(max_retries):
+            try:
+                locators, answers = await self._generate_fields_and_answers(
+                    new_tab=new_tab, simplified_form_html=simplified_form_html
+                )
+
+                await self._fill_form_fields(
+                    locators=locators, answers=answers, new_tab=new_tab
+                )
+
+                print("Form answered successfully")
+                return True
+            except Exception as e:  # noqa: BLE001
+                error = str(e)
+                print(f"Attempt {attempt + 1}/{max_retries} failed:\n{error}")
+
+                if attempt < max_retries - 1:
+                    print("Retrying with error feedback...")
+        await new_tab.close()
+        return False
+
+    async def _generate_fields_and_answers(
+        self, simplified_form_html: str, new_tab: Page
+    ) -> tuple[list, dict]:
+        with trace(workflow_name="Indeed Field Locator"):
+            try:
+                agent_input = f"""
+                                    Raw HTML Form: {simplified_form_html}
+                                    """
+                locator_result = await Runner.run(
+                    starting_agent=fields_extractor_agent,
+                    input=agent_input,
+                )
+                locators = locator_result.final_output.model_dump()["fields"]
+                pprint(locators)
+
+                agent_answers = await Runner.run(
+                    starting_agent=form_evaluator,
+                    input=json.dumps(locators),
+                )
+                answers_dump = agent_answers.final_output.model_dump()["fields"]
+                answers = {item["field"]: item["answer"] for item in answers_dump}
+
+                # if any(
+                #     answer["label"].strip().lower() == "unknown"
+                #     for answer in answers.values()
+                # ):
+                #     alert_for_unknown_answer()
+                #     if await save_job_toggle.count() > 0:
+                #         await save_job_toggle.click()
+                #     continue
+
+                print("Answers:", answers)
+                await self._fill_form_fields(
+                    new_tab=new_tab, answers=answers, locators=locators
+                )
+                return locators, answers
+            except openai.BadRequestError as e:
+                print("Model error", e)
+                raise
+            except Exception as error:
+                print(f"Unhandled error {error}")
+                raise
+
+    async def _fill_form_fields(self, locators: list, answers: dict, new_tab: Page):
+        try:
+            for field in locators:
+                field_answer = answers.get(field["field_name"])
+                match field["field_type"]:
+                    case "select":
+                        select_element = new_tab.locator(
+                            f'{field["locator"]}:not([aria-hidden="true"])'
+                        )
+
+                        await select_element.scroll_into_view_if_needed()
+                        await select_element.select_option(field_answer["label"])
+
+                    case "checkbox" | "checkboxes":
+                        answer_list = field_answer["locator"].split(", ")
+                        for answer in answer_list:
+                            checkbox_element = new_tab.locator(
+                                f'{answer}:not([aria-hidden="true"])'
+                            )
+
+                            await checkbox_element.check(force=True)
+                    case "radio":
+                        radio_element = new_tab.locator(
+                            f'{field_answer["locator"]}:not([aria-hidden="true"])'
+                        )
+
+                        await radio_element.scroll_into_view_if_needed()
+                        await radio_element.click()
+                    case "textarea" | "text":
+                        text_area_element = new_tab.locator(
+                            f'{field_answer["locator"]}:not([aria-hidden="true"])'
+                        )
+
+                        await text_area_element.scroll_into_view_if_needed()
+                        await text_area_element.clear()
+                        await text_area_element.fill(field_answer["label"])
+                    case "number":
+                        number_field = new_tab.locator(
+                            f'{field_answer["locator"]}:not([aria-hidden="true"])'
+                        )
+
+                        await number_field.scroll_into_view_if_needed()
+                        await number_field.fill(field_answer["label"])
+        except Exception as e:
+            print("Error occured filling in fields", e)
+            raise
+
+    async def automate_job_search(self):
+        await self.persistent_browser_login(
+            page_link=INDEED_PAGE_LINK, profile="IndeedProfile"
+        )
+
+        for key in self.search_keys:
             await self._search_and_filter(keyword=key)
 
             job_scroll_pane = self.page.locator(".jobsearch-LeftPane")
@@ -144,142 +254,56 @@ class Indeed(BasePage):
 
                     if not has_quick_apply_btn:
                         continue
-
-                    if has_quick_apply_btn and run_result.get("match") is True:
-                        async with self.page.context.expect_page() as new_page:
-                            await quick_apply_btn.click()
-                        new_tab = await new_page.value
-                        await new_tab.wait_for_timeout(2500)
-                        await new_tab.wait_for_load_state("domcontentloaded")
-                        continue_btn = new_tab.get_by_role("button", name="Continue")
-
-                        while await continue_btn.count() > 0:
-                            await continue_btn.nth(0).click()
+                    try:
+                        if has_quick_apply_btn and run_result.get("match") is True:
+                            async with self.page.context.expect_page() as new_page:
+                                await quick_apply_btn.click()
+                            new_tab = await new_page.value
+                            await new_tab.wait_for_timeout(2500)
                             await new_tab.wait_for_load_state("domcontentloaded")
-                            await new_tab.wait_for_timeout(2000)
-                            has_questions = (
-                                await new_tab.locator(".ia-Questions").count() > 0
+                            continue_btn = new_tab.get_by_role(
+                                "button", name="Continue"
                             )
-
-                            if has_questions:
-                                form = new_tab.locator(".ia-Questions").nth(0)
-                                form_html_string = await form.evaluate(
-                                    "element => element.outerHTML"
+                            error_occured_answering_form = False
+                            while await continue_btn.count() > 0:
+                                await continue_btn.nth(0).click()
+                                await new_tab.wait_for_load_state("domcontentloaded")
+                                await new_tab.wait_for_timeout(2000)
+                                has_questions = (
+                                    await new_tab.locator(".ia-Questions").count() > 0
                                 )
-                                simplified_form_html = extract_all_form_fields(
-                                    form_html_string,
-                                )
 
-                                with trace(workflow_name="Field Locator"):
-                                    try:
-                                        agent_input = f"""
-                                                        Raw HTML Form: {simplified_form_html}
-                                                        """
-                                        locator_result = await Runner.run(
-                                            starting_agent=fields_extractor_agent,
-                                            input=agent_input,
+                                if has_questions:
+                                    form = new_tab.locator(".ia-Questions").nth(0)
+                                    form_html_string = await form.evaluate(
+                                        "element => element.outerHTML"
+                                    )
+                                    simplified_form_html = extract_all_form_fields(
+                                        form_html_string,
+                                    )
+                                    print(simplified_form_html)
+                                    successfully_answered_form = (
+                                        await self._answer_form_questions(
+                                            new_tab=new_tab,
+                                            simplified_form_html=simplified_form_html,
                                         )
-                                        locators = (
-                                            locator_result.final_output.model_dump()[
-                                                "fields"
-                                            ]
-                                        )
-                                        pprint(locators)
-
-                                        agent_answers = await Runner.run(
-                                            starting_agent=form_evaluator,
-                                            input=json.dumps(locators),
-                                        )
-                                        answers_dump = (
-                                            agent_answers.final_output.model_dump()[
-                                                "fields"
-                                            ]
-                                        )
-                                        answers = {
-                                            item["field"]: item["answer"]
-                                            for item in answers_dump
-                                        }
-
-                                        if any(
-                                            answer["label"].strip().lower() == "unknown"
-                                            for answer in answers.values()
-                                        ):
-                                            alert_for_unknown_answer()
-                                            if await save_job_toggle.count() > 0:
-                                                await save_job_toggle.click()
-                                            continue
-
-                                        print("Answers:", answers)
-                                        for field in locators:
-                                            field_answer = answers.get(
-                                                field["field_name"]
-                                            )
-                                            match field["field_type"]:
-                                                case "select":
-                                                    select_element = new_tab.locator(
-                                                        f'{field["locator"]}:not([aria-hidden="true"])'
-                                                    )
-                                                    if not await select_element.is_visible():
-                                                        continue
-                                                    await select_element.scroll_into_view_if_needed()
-                                                    await select_element.select_option(
-                                                        field_answer["label"]
-                                                    )
-
-                                                case "checkbox" | "checkboxes":
-                                                    answer_list = field_answer[
-                                                        "locator"
-                                                    ].split(", ")
-                                                    for answer in answer_list:
-                                                        checkbox_element = new_tab.locator(
-                                                            f'{answer}:not([aria-hidden="true"])'
-                                                        )
-                                                        if not await checkbox_element.is_visible():
-                                                            continue
-                                                        await checkbox_element.check(
-                                                            force=True
-                                                        )
-                                                case "radio":
-                                                    radio_element = new_tab.locator(
-                                                        f'{field_answer["locator"]}:not([aria-hidden="true"])'
-                                                    )
-                                                    if not await radio_element.is_visible():
-                                                        continue
-                                                    await radio_element.scroll_into_view_if_needed()
-                                                    await radio_element.click()
-                                                case "textarea" | "text":
-                                                    text_area_element = new_tab.locator(
-                                                        f'{field_answer["locator"]}:not([aria-hidden="true"])'
-                                                    )
-                                                    if not await text_area_element.is_visible():
-                                                        continue
-                                                    await text_area_element.scroll_into_view_if_needed()
-                                                    await text_area_element.clear()
-                                                    await text_area_element.fill(
-                                                        field_answer["label"]
-                                                    )
-                                                case "number":
-                                                    number_field = new_tab.locator(
-                                                        f'{field_answer["locator"]}:not([aria-hidden="true"])'
-                                                    )
-                                                    if not await number_field.is_visible():
-                                                        continue
-                                                    await number_field.scroll_into_view_if_needed()
-                                                    await number_field.fill(
-                                                        field_answer["label"]
-                                                    )
-                                    except openai.BadRequestError as e:
-                                        print("Model error", e)
-                                        continue
-                                    except Exception as error:  # noqa: BLE001 - Comment for ruff
-                                        print(f"Unhandled error {error}")
-                                        continue
-                        await new_tab.get_by_test_id(
-                            "submit-application-button"
-                        ).click()
-                        await new_tab.wait_for_timeout(2500)
+                                    )
+                                    if not successfully_answered_form:
+                                        error_occured_answering_form = True
+                                        break
+                            if not error_occured_answering_form:
+                                await new_tab.get_by_test_id(
+                                    "submit-application-button"
+                                ).click()
+                                await new_tab.wait_for_timeout(2500)
+                                await new_tab.close()
+                            else:
+                                continue
+                    except Exception as error:  # noqa: BLE001
+                        print("Error occured...", error)
+                        print("Continuing the loop")
                         await new_tab.close()
-
+                        continue
                 next_btn = self.page.get_by_test_id("pagination-page-next")
                 if await next_btn.count() == 0:
                     break

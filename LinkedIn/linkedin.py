@@ -254,18 +254,9 @@ class LinkedIn(BasePage):
     async def automate_job_search(self):
         await self.persistent_browser_login(page_link=LINKEDIN_PAGE_LINK)
         self.frame = self.page.locator('[data-testid="interop-iframe"]').content_frame
-        search_keys = [
-            "Laravel",
-            "React",
-            "Node.js",
-            "Python",
-            "Software Engineer",
-            "Software Developer",
-            "AWS",
-            "DevOps",
-        ]
+
         try:
-            for key in search_keys:
+            for key in self.search_keys:
                 await self._search_and_filter(keyword=key, listing_time=7)
                 while True:
                     job_cards = self.frame.locator(

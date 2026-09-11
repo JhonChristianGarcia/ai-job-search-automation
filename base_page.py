@@ -13,6 +13,7 @@ class BasePage:
         self._playwright = None
         self._context = None
         self.page: Page | None = None
+        self.search_keys: list = []
 
     async def handle_new_tab(self, new_tab):
         await Stealth().apply_stealth_async(new_tab)
@@ -21,7 +22,16 @@ class BasePage:
         self, page_link: str, profile: str = "PlaywrightProfile"
     ):
         self._playwright = await async_playwright().start()
-
+        self.search_keys = [
+            "Software Engineer",
+            "Laravel",
+            "React",
+            "Node.js",
+            "Python",
+            "Software Developer",
+            "AWS",
+            "DevOps",
+        ]
         user_data_dir = Path(
             rf"C:\Users\xtian\AppData\Local\BraveSoftware\Brave-Browser\{profile}"
         )
@@ -112,6 +122,7 @@ class BasePage:
             "power mac",
             "lago",
             "ncs group",
+            "mindrift",
         ]
 
         description = job_description.lower()

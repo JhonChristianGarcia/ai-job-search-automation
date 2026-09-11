@@ -120,17 +120,7 @@ class Jobstreet(BasePage):
             page_link=JOBSTREET_LINK, profile="JobstreetProfile"
         )
 
-        search_keys = [
-            "Node.js",
-            "Laravel",
-            "Software Engineer",
-            "Software Developer",
-            "React",
-            "AWS",
-            "DevOps",
-        ]
-
-        for key in search_keys:
+        for key in self.search_keys:
             await self._search_and_filter_jobs(
                 keyword=key, remote_only=False, listing_time=3
             )
@@ -244,126 +234,142 @@ class Jobstreet(BasePage):
                     ):
                         await save_btn.click()
                         continue
-                    if has_quick_apply_btn and run_result.get("match") is True:
-                        async with self.page.context.expect_page() as new_page:
-                            await quick_apply_btn.click()
-                        new_tab = await new_page.value
-                        await new_tab.wait_for_load_state("domcontentloaded")
-                        dont_include_a_cover_letter = new_tab.locator("label").filter(
-                            has_text="Don't include a cover letter"
-                        )
-                        await dont_include_a_cover_letter.click()
-                        continue_btn = new_tab.get_by_test_id("continue-button")
+                    try:
+                        if has_quick_apply_btn and run_result.get("match") is True:
+                            async with self.page.context.expect_page() as new_page:
+                                await quick_apply_btn.click()
+                            new_tab = await new_page.value
+                            await new_tab.wait_for_load_state("domcontentloaded")
+                            dont_include_a_cover_letter = new_tab.locator(
+                                "label"
+                            ).filter(has_text="Don't include a cover letter")
+                            await dont_include_a_cover_letter.click()
+                            continue_btn = new_tab.get_by_test_id("continue-button")
 
-                        while await continue_btn.count() > 0:
-                            await continue_btn.nth(0).click()
-                            print("Clicked continue button")
-                            await new_tab.wait_for_timeout(1000)
-                            error_panel = new_tab.locator("#errorPanel")
-                            has_errors = await error_panel.count() > 0
-                            errors = await error_panel.get_by_role("listitem").all()
-                            error_msgs = [await error.inner_text() for error in errors]
+                            while await continue_btn.count() > 0:
+                                await continue_btn.nth(0).click()
+                                print("Clicked continue button")
+                                await new_tab.wait_for_timeout(1000)
+                                error_panel = new_tab.locator("#errorPanel")
+                                has_errors = await error_panel.count() > 0
+                                errors = await error_panel.get_by_role("listitem").all()
+                                error_msgs = [
+                                    await error.inner_text() for error in errors
+                                ]
 
-                            print("Has errors:", has_errors)
-                            if has_errors:
-                                form = new_tab.locator("form").nth(0)
-                                form_html_string = await form.evaluate(
-                                    "element => element.outerHTML"
-                                )
-                                simplified_form_html = extract_required_fields(
-                                    html=form_html_string, required_fields=error_msgs
-                                )
+                                print("Has errors:", has_errors)
+                                if has_errors:
+                                    form = new_tab.locator("form").nth(0)
+                                    form_html_string = await form.evaluate(
+                                        "element => element.outerHTML"
+                                    )
+                                    simplified_form_html = extract_required_fields(
+                                        html=form_html_string,
+                                        required_fields=error_msgs,
+                                    )
 
-                                with trace(workflow_name="Field Locator"):
-                                    try:
-                                        agent_input = f"""
-                                                            Required fields: {", ".join(error_msgs)}
-                                                            Raw HTML Form: {simplified_form_html}
-                                                        """
-                                        locator_result = await Runner.run(
-                                            starting_agent=fields_extractor_agent,
-                                            input=agent_input,
-                                        )
-                                        locators = (
-                                            locator_result.final_output.model_dump()[
-                                                "fields"
-                                            ]
-                                        )
-                                        pprint(locators)
-
-                                        agent_answers = await Runner.run(
-                                            starting_agent=form_evaluator,
-                                            input=json.dumps(locators),
-                                        )
-                                        answers_dump = (
-                                            agent_answers.final_output.model_dump()[
-                                                "fields"
-                                            ]
-                                        )
-                                        answers = {
-                                            item["field"]: item["answer"]
-                                            for item in answers_dump
-                                        }
-
-                                        print("Answers:", answers)
-                                        for field in locators:
-                                            field_answer = answers.get(
-                                                field["field_name"]
+                                    with trace(workflow_name="Jobstreet Field Locator"):
+                                        try:
+                                            agent_input = f"""
+                                                                Required fields: {", ".join(error_msgs)}
+                                                                Raw HTML Form: {simplified_form_html}
+                                                            """
+                                            locator_result = await Runner.run(
+                                                starting_agent=fields_extractor_agent,
+                                                input=agent_input,
                                             )
-                                            match field["field_type"]:
-                                                case "select":
-                                                    select_element = new_tab.locator(
-                                                        field["locator"]
-                                                    )
-                                                    await select_element.select_option(
-                                                        field_answer["label"]
-                                                    )
+                                            locators = locator_result.final_output.model_dump()[
+                                                "fields"
+                                            ]
+                                            pprint(locators)
 
-                                                case "checkbox" | "checkboxes":
-                                                    answers = field_answer["locator"]
-                                                    answer_list = answers.split(", ")
-                                                    for answer in answer_list:
-                                                        checkbox_element = (
-                                                            new_tab.locator(answer)
+                                            agent_answers = await Runner.run(
+                                                starting_agent=form_evaluator,
+                                                input=json.dumps(locators),
+                                            )
+                                            answers_dump = (
+                                                agent_answers.final_output.model_dump()[
+                                                    "fields"
+                                                ]
+                                            )
+                                            answers = {
+                                                item["field"]: item["answer"]
+                                                for item in answers_dump
+                                            }
+
+                                            print("Answers:", answers)
+                                            for field in locators:
+                                                field_answer = answers.get(
+                                                    field["field_name"]
+                                                )
+                                                match field["field_type"]:
+                                                    case "select":
+                                                        select_element = (
+                                                            new_tab.locator(
+                                                                field["locator"]
+                                                            )
                                                         )
-                                                        await checkbox_element.check()
-                                                case "radio":
-                                                    radio_element = new_tab.locator(
-                                                        field_answer["locator"]
-                                                    )
-                                                    await radio_element.scroll_into_view_if_needed()
-                                                    await radio_element.click()
-                                                case "textarea" | "text":
-                                                    text_area_element = new_tab.locator(
-                                                        field_answer["locator"]
-                                                    )
-                                                    await text_area_element.fill(
-                                                        field_answer["label"]
-                                                    )
+                                                        await select_element.select_option(
+                                                            field_answer["label"]
+                                                        )
 
-                                    except openai.BadRequestError as e:
-                                        print("Model error", e)
-                                        continue
-                                    except Exception as e:  # noqa: BLE001 Ruff comment
-                                        print("Something went wrong", e)
-                                        continue
-                        await new_tab.get_by_test_id(
-                            "review-submit-application"
-                        ).click()
-                        await new_tab.wait_for_load_state("networkidle")
-                        await new_tab.wait_for_timeout(2000)
-                        await new_tab.close()
-                        self.run_summary.append(
-                            RunSummarry(
-                                job_title=job_title,
-                                job_description=job_description,
-                                match=run_result["match"],
-                                percentage=run_result["percentage"],
-                                reasoning=run_result["reasoning"],
-                                matched_skills=run_result["matched_skills"],
-                                missing_skills=run_result["missing_skills"],
+                                                    case "checkbox" | "checkboxes":
+                                                        answers = field_answer[
+                                                            "locator"
+                                                        ]
+                                                        answer_list = answers.split(
+                                                            ", "
+                                                        )
+                                                        for answer in answer_list:
+                                                            checkbox_element = (
+                                                                new_tab.locator(answer)
+                                                            )
+                                                            await (
+                                                                checkbox_element.check()
+                                                            )
+                                                    case "radio":
+                                                        radio_element = new_tab.locator(
+                                                            field_answer["locator"]
+                                                        )
+                                                        await radio_element.scroll_into_view_if_needed()
+                                                        await radio_element.click()
+                                                    case "textarea" | "text":
+                                                        text_area_element = (
+                                                            new_tab.locator(
+                                                                field_answer["locator"]
+                                                            )
+                                                        )
+                                                        await text_area_element.fill(
+                                                            field_answer["label"]
+                                                        )
+
+                                        except openai.BadRequestError as e:
+                                            print("Model error", e)
+                                            continue
+                                        except Exception as e:  # noqa: BLE001 Ruff comment
+                                            print("Something went wrong", e)
+                                            continue
+                            await new_tab.get_by_test_id(
+                                "review-submit-application"
+                            ).click()
+                            await new_tab.wait_for_load_state("networkidle")
+                            await new_tab.wait_for_timeout(2000)
+                            await new_tab.close()
+                            self.run_summary.append(
+                                RunSummarry(
+                                    job_title=job_title,
+                                    job_description=job_description,
+                                    match=run_result["match"],
+                                    percentage=run_result["percentage"],
+                                    reasoning=run_result["reasoning"],
+                                    matched_skills=run_result["matched_skills"],
+                                    missing_skills=run_result["missing_skills"],
+                                )
                             )
-                        )
+                    except Exception as error:  # noqa: BLE001
+                        print("Error occured", error)
+                        await new_tab.close()
+                        continue
 
                 next_btn = self.page.get_by_role("link", name="Next")
                 if await next_btn.count() == 0:

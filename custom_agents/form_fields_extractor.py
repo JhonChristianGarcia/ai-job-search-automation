@@ -230,6 +230,7 @@ INSTRUCTIONS = """
     - maxlength
     - pattern
     - step
+    - elements with ids like "error" example: #number-question-error-text-_r_p_
 
     If an explicit validation/error message is present in the HTML, extract
     its exact visible text into the `validation_message` property.
