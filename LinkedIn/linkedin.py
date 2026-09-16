@@ -268,18 +268,19 @@ class LinkedIn(BasePage):
                     for i in range(count):
                         # Locate the card freshly in each iteration to avoid stale element references
                         card = job_cards.nth(i)
-
+                        job_state = card.locator(
+                            ".job-card-container__footer-job-state"
+                        )
+                        if (await job_state.count()) == 1 and (
+                            await job_state.inner_text()
+                        ) == "Viewed":
+                            print("Viewed already, skipping")
+                            continue
                         card_details = await card.inner_text()
+                        print("Card details", card_details)
                         applied = "Applied" in card_details
                         viewed = "Viewed" in card_details
-
-                        if (
-                            self._skip_this_job(card_details)
-                            or applied
-                            or viewed
-                            or "Perform" in card_details
-                            or "Pear Tree" in card_details
-                        ):
+                        if self._skip_this_job(card_details) or applied or viewed:
                             continue
 
                         await card.evaluate(
@@ -295,11 +296,16 @@ class LinkedIn(BasePage):
                         await self.page.wait_for_timeout(1500)
 
                         job_details_section = self.frame.locator(".jobs-details").first
+                        company_name = await self.frame.locator(
+                            ".job-details-jobs-unified-top-card__company-name"
+                        ).first.inner_text()
 
                         already_applied = (
                             "Applied" in await job_details_section.inner_text()
                         )
-                        if already_applied:
+                        if already_applied or self._skip_this_company(
+                            company_name=company_name
+                        ):
                             continue
 
                         job_title = await job_details_section.locator(
@@ -325,6 +331,16 @@ class LinkedIn(BasePage):
                         easy_apply_btn = self.frame.get_by_role(
                             "button", name=re.compile(r"easy apply", re.IGNORECASE)
                         )
+
+                        if (
+                            await easy_apply_btn.count() == 0
+                            and run_result.get("match") is True
+                        ):
+                            save_btn = self.frame.locator(".jobs-save-button")
+                            if await save_btn.count() > 0:
+                                await save_btn.nth(0).click()
+                                await self.wait_for_timeout(2)
+                            continue
                         ### INFO: Clicked easy apply btn - opens up the modal
                         await easy_apply_btn.nth(0).click()
 
@@ -339,10 +355,12 @@ class LinkedIn(BasePage):
                                 await modal.get_by_role(
                                     "button", name="Submit application"
                                 ).click()
-                                await self.page.wait_for_timeout(1500)
+                                await self.page.wait_for_timeout(2500)
+                                await self.page.wait_for_load_state("domcontentloaded")
                                 await self.frame.get_by_role(
                                     "button", name="Not now"
                                 ).click()
+                                await self.page.wait_for_timeout(2500)
                                 continue
 
                             able_to_answer_form = True
@@ -471,18 +489,22 @@ class LinkedIn(BasePage):
                             if not able_to_answer_form:
                                 print("LINE 449 UNABLE TO ANSWER FORM CONTINUING")
                                 continue
-                            checkbox = modal.locator("#follow-company-checkbox").first
+                            follow_checkbox = modal.locator(
+                                "#follow-company-checkbox"
+                            ).first
+                            if await follow_checkbox.count() == 0:
+                                await submit_application_btn.click()
+                                await self.page.wait_for_timeout(1500)
+                                await self.page.keyboard.press("Escape")
+                                break
 
-                            if (
-                                await checkbox.is_checked()
-                                and await checkbox.count() == 1
-                            ):
+                            if await follow_checkbox.is_checked():
                                 label = modal.locator(
                                     "label[for='follow-company-checkbox']"
                                 ).first
                                 await label.click()
 
-                                assert not await checkbox.is_checked()
+                                assert not await follow_checkbox.is_checked()
                             await submit_application_btn.click()
                             await self.page.wait_for_timeout(1500)
                             await self.page.keyboard.press("Escape")
@@ -497,7 +519,7 @@ class LinkedIn(BasePage):
                     await self.page.wait_for_timeout(1000)
         except Exception as error:  # noqa: BLE001
             print(error)
-            await self.page.pause()
+            raise
 
     async def _search_and_filter(
         self, keyword: str = "Software Engineer", listing_time: int | None = None
@@ -550,13 +572,13 @@ class LinkedIn(BasePage):
                 )
                 .click()
             )
-            await self.page.wait_for_timeout(500)
+            await self.page.wait_for_timeout(1500)
             await (
                 self.page.locator('[data-testid="interop-iframe"]')
                 .content_frame.get_by_role("radio", name="Easy Apply filter.")
                 .click()
             )
-            await self.page.wait_for_timeout(1000)
+            await self.page.wait_for_timeout(1500)
         await self.page.wait_for_timeout(2000)
 
 
@@ -564,6 +586,10 @@ if __name__ == "__main__":
     linkedin = LinkedIn()
 
     try:
+        asyncio.run(linkedin.automate_job_search())
+    except Exception as error:
+        print("Something went wrong:", error)
+        print("Retrying...")
         asyncio.run(linkedin.automate_job_search())
     finally:
         print("Execution finished")

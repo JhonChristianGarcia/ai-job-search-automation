@@ -24,6 +24,7 @@ class BasePage:
         self._playwright = await async_playwright().start()
         self.search_keys = [
             "Software Engineer",
+            "Full stack developer",
             "Laravel",
             "React",
             "Node.js",
@@ -123,6 +124,8 @@ class BasePage:
             "lago",
             "ncs group",
             "mindrift",
+            "hired",
+            "amcs",
         ]
 
         description = job_description.lower()
@@ -137,6 +140,35 @@ class BasePage:
         """
 
         await self.page.wait_for_timeout(duration * 1000)
+
+    def _skip_this_company(self, company_name: str) -> bool:
+        companies_to_skip = [
+            "eclaro",
+            "hire feed",
+            "quik hire staffing",
+            "microsourcing",
+            "hunt st",
+            "crossing hurdles",
+            "crossover",
+            "micro1",
+            "bjak",
+            "ncs philippines",
+            "yondu",
+            "white cloak",
+            "power mac",
+            "lago",
+            "ncs group",
+            "mindrift",
+            "hired",
+            "SYSGEN RPO",
+            "cp health innovations",
+            "hyremote",
+            "webee labs",
+            "webee",
+        ]
+        return any(
+            company_name.lower() in company.lower() for company in companies_to_skip
+        )
 
     async def evaluate_job(
         self,

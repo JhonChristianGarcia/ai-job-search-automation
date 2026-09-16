@@ -115,6 +115,67 @@ class Jobstreet(BasePage):
 
         # jobs = self.page.get_by_test_id("job-list-item-link-overlay")
 
+    async def answer_form(
+        error_msgs: list[str], simplified_form_html: str, new_tab: Page
+    ):
+        retries = 1
+        max_retries = 2
+
+        while retries <= max_retries:
+            with trace(workflow_name="Jobstreet Field Locator"):
+                try:
+                    agent_input = f"""
+                                Required fields: {", ".join(error_msgs)}
+                                Raw HTML Form: {simplified_form_html}
+                                """
+                    locator_result = await Runner.run(
+                        starting_agent=fields_extractor_agent,
+                        input=agent_input,
+                    )
+                    locators = locator_result.final_output.model_dump()["fields"]
+                    pprint(locators)
+
+                    agent_answers = await Runner.run(
+                        starting_agent=form_evaluator,
+                        input=json.dumps(locators),
+                    )
+                    answers_dump = agent_answers.final_output.model_dump()["fields"]
+                    answers = {item["field"]: item["answer"] for item in answers_dump}
+
+                    print("Answers:", answers)
+                    for field in locators:
+                        field_answer = answers.get(field["field_name"])
+                        match field["field_type"]:
+                            case "select":
+                                select_element = new_tab.locator(field["locator"])
+                                await select_element.select_option(
+                                    field_answer["label"]
+                                )
+
+                            case "checkbox" | "checkboxes":
+                                answers = field_answer["locator"]
+                                answer_list = answers.split(", ")
+                                for answer in answer_list:
+                                    checkbox_element = new_tab.locator(answer)
+                                    await checkbox_element.check()
+                            case "radio":
+                                radio_element = new_tab.locator(field_answer["locator"])
+                                await radio_element.scroll_into_view_if_needed()
+                                await radio_element.click()
+                            case "textarea" | "text":
+                                text_area_element = new_tab.locator(
+                                    field_answer["locator"]
+                                )
+                                await text_area_element.fill(field_answer["label"])
+                    return True
+                except openai.BadRequestError as e:
+                    print("Model error", e)
+                    retries += 1
+                except Exception as e:  # noqa: BLE001 Ruff comment
+                    print("Something went wrong", e)
+                    retries += 1
+        return False
+
     async def automate_job_search(self):
         await self.persistent_browser_login(
             page_link=JOBSTREET_LINK, profile="JobstreetProfile"
@@ -124,7 +185,12 @@ class Jobstreet(BasePage):
             await self._search_and_filter_jobs(
                 keyword=key, remote_only=False, listing_time=3
             )
-            has_next_page = await self.page.get_by_role("link", name="Next").count() > 0
+            has_next_page = (
+                await self.page.locator(
+                    'a[rel="nofollow next"][data-automation^="page-"]:not([aria-hidden="true"])'
+                ).count()
+                > 0
+            )
             while has_next_page:
                 jobs = await self.page.get_by_test_id("job-card").all()
                 total_jobs = await self.page.get_by_test_id("job-card").count()
@@ -153,6 +219,7 @@ class Jobstreet(BasePage):
                     ) > 0
                     viewed = "Viewed" in job_listing_date
                     started_applying = "Started applying" in job_listing_date
+
                     if (
                         already_applied
                         or viewed
@@ -162,7 +229,7 @@ class Jobstreet(BasePage):
                         or not salary_in_range(job_salary)
                     ):
                         continue
-
+                    await job.scroll_into_view_if_needed()
                     await job.click()
                     await self._wait_for_timeout()
 
@@ -268,87 +335,13 @@ class Jobstreet(BasePage):
                                         required_fields=error_msgs,
                                     )
 
-                                    with trace(workflow_name="Jobstreet Field Locator"):
-                                        try:
-                                            agent_input = f"""
-                                                                Required fields: {", ".join(error_msgs)}
-                                                                Raw HTML Form: {simplified_form_html}
-                                                            """
-                                            locator_result = await Runner.run(
-                                                starting_agent=fields_extractor_agent,
-                                                input=agent_input,
-                                            )
-                                            locators = locator_result.final_output.model_dump()[
-                                                "fields"
-                                            ]
-                                            pprint(locators)
-
-                                            agent_answers = await Runner.run(
-                                                starting_agent=form_evaluator,
-                                                input=json.dumps(locators),
-                                            )
-                                            answers_dump = (
-                                                agent_answers.final_output.model_dump()[
-                                                    "fields"
-                                                ]
-                                            )
-                                            answers = {
-                                                item["field"]: item["answer"]
-                                                for item in answers_dump
-                                            }
-
-                                            print("Answers:", answers)
-                                            for field in locators:
-                                                field_answer = answers.get(
-                                                    field["field_name"]
-                                                )
-                                                match field["field_type"]:
-                                                    case "select":
-                                                        select_element = (
-                                                            new_tab.locator(
-                                                                field["locator"]
-                                                            )
-                                                        )
-                                                        await select_element.select_option(
-                                                            field_answer["label"]
-                                                        )
-
-                                                    case "checkbox" | "checkboxes":
-                                                        answers = field_answer[
-                                                            "locator"
-                                                        ]
-                                                        answer_list = answers.split(
-                                                            ", "
-                                                        )
-                                                        for answer in answer_list:
-                                                            checkbox_element = (
-                                                                new_tab.locator(answer)
-                                                            )
-                                                            await (
-                                                                checkbox_element.check()
-                                                            )
-                                                    case "radio":
-                                                        radio_element = new_tab.locator(
-                                                            field_answer["locator"]
-                                                        )
-                                                        await radio_element.scroll_into_view_if_needed()
-                                                        await radio_element.click()
-                                                    case "textarea" | "text":
-                                                        text_area_element = (
-                                                            new_tab.locator(
-                                                                field_answer["locator"]
-                                                            )
-                                                        )
-                                                        await text_area_element.fill(
-                                                            field_answer["label"]
-                                                        )
-
-                                        except openai.BadRequestError as e:
-                                            print("Model error", e)
-                                            continue
-                                        except Exception as e:  # noqa: BLE001 Ruff comment
-                                            print("Something went wrong", e)
-                                            continue
+                                    able_to_answer = await self.answer_form(
+                                        error_msgs=error_msgs,
+                                        simplified_form_html=simplified_form_html,
+                                        new_tab=new_tab,
+                                    )
+                                    if able_to_answer is False:
+                                        raise Exception("Failed to answer form")  # noqa: TRY002
                             await new_tab.get_by_test_id(
                                 "review-submit-application"
                             ).click()
@@ -371,10 +364,14 @@ class Jobstreet(BasePage):
                         await new_tab.close()
                         continue
 
-                next_btn = self.page.get_by_role("link", name="Next")
+                next_btn = self.page.locator(
+                    'a[rel="nofollow next"][data-automation^="page-"]:not([aria-hidden="true"])'
+                )
+                print(await next_btn.count())
                 if await next_btn.count() == 0:
                     break
-                await next_btn.nth(0).click()
+                await next_btn.nth(0).scroll_into_view_if_needed()
+                await next_btn.nth(0).click(force=True)
                 await self._wait_for_timeout()
                 # with open("output.json", "w", encoding="utf-8") as f:
                 #     json.dump([summary.model_dump() for summary in self.run_summary], f, indent=4, ensure_ascii=False )
@@ -386,6 +383,10 @@ if __name__ == "__main__":
     jobstreet = Jobstreet()
 
     try:
+        asyncio.run(jobstreet.automate_job_search())
+    except Exception as error:  # noqa: BLE001
+        print("Something went wrong:", error)
+        print("Retrying...")
         asyncio.run(jobstreet.automate_job_search())
     finally:
         print(f"Applied to {len(jobstreet.run_summary)} jobs")

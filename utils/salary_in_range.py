@@ -7,6 +7,8 @@ def salary_in_range(
     """Returns true if the salary range is within or exceeds the desired salary"""
     if not salary_range:
         return True
+    if "$" in salary_range or re.search(r"\bUSD\b", salary_range, re.IGNORECASE):
+        return True
 
     salary_pattern = r"(?:₱|PHP)\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)"
 

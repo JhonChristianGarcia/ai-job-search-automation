@@ -176,7 +176,6 @@ class Indeed(BasePage):
 
         for key in self.search_keys:
             await self._search_and_filter(keyword=key)
-
             job_scroll_pane = self.page.locator(".jobsearch-LeftPane")
             while True:
                 job_cards = job_scroll_pane.locator(
@@ -317,6 +316,10 @@ if __name__ == "__main__":
     indeed = Indeed()
 
     try:
+        asyncio.run(indeed.automate_job_search())
+    except Exception as error:  # noqa: BLE001
+        print("Something went wrong:", error)
+        print("Retrying...")
         asyncio.run(indeed.automate_job_search())
     finally:
         print("Execution finished")

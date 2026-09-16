@@ -5,6 +5,8 @@ _RESOURCES_DIR = Path(__file__).parent
 
 resume = pymupdf4llm.to_markdown(_RESOURCES_DIR / "resume.pdf")
 applicant_name = "Jhon Christian Garcia"
+
+
 def prompt() -> str:
     return f"""
 # Role
@@ -31,6 +33,16 @@ Resume:
 - {applicant_name} is not open to FULL ONSITE WORK 
 - Reject any mention of FULL ONSITE WORK
 - If there are so many technologies that are required and the applicant does not, discourage applying
+
+# {applicant_name} do not want to the following job titles:
+- Data Engineer
+- Manual QA Engineer
+- Product Manager
+- Service Now developer
+- Salesforce Developer
+- Mulesoft Developer
+- Product Engineer
+
 
 # Prioritize Remote and Hybrid work
 - The applicant prefers Remote or Hybrid work
@@ -189,8 +201,6 @@ substantial technical and responsibility overlap.
 
 Return only the requested structured output.
 """
-
-
 
 
 if __name__ == "__main__":
