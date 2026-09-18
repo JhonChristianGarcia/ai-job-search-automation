@@ -1,15 +1,15 @@
 import asyncio
 import json
 from pprint import pprint
+from urllib.parse import urljoin
 
 import openai
 from agents import Runner, trace
 from playwright.async_api import Locator, Page
 
-from base_page import BasePage
+from base_page import BasePage, RunSummarry, Type
 from custom_agents.form_evaluator import form_evaluator
 from custom_agents.form_fields_extractor import fields_extractor_agent
-from utils.alert_for_unknown_question import alert_for_unknown_answer
 from utils.indeed_fields_extractor import extract_all_form_fields
 from utils.salary_in_range import salary_in_range
 
@@ -173,143 +173,190 @@ class Indeed(BasePage):
         await self.persistent_browser_login(
             page_link=INDEED_PAGE_LINK, profile="IndeedProfile"
         )
-
-        for key in self.search_keys:
-            await self._search_and_filter(keyword=key)
-            job_scroll_pane = self.page.locator(".jobsearch-LeftPane")
-            while True:
-                job_cards = job_scroll_pane.locator(
-                    '[data-testid="slider_container"]:not([aria-hidden="true"])'
-                )
-                jobs = await job_cards.all()
-                total_jobs = await job_cards.count()
-                if total_jobs == 0:
-                    print("No jobs found")
-                    break
-                print(f"Found {total_jobs} jobs on this page")
-                for job in jobs:
-                    save_job_toggle = job.get_by_role("listitem").get_by_role(
-                        "button", name="Save job Toggle", pressed=False
+        try:
+            for key in self.search_keys:
+                await self._search_and_filter(keyword=key, listing_time=24)
+                job_scroll_pane = self.page.locator(".jobsearch-LeftPane")
+                while True:
+                    job_cards = job_scroll_pane.locator(
+                        '[data-testid="slider_container"]:not([aria-hidden="true"])'
                     )
-                    job_quick_details = await job.inner_text()
-                    salary_range_element = job.locator(
-                        "[data-testid~='salary-snippet-container']"
-                    )
-                    salary_range = (
-                        await salary_range_element.inner_text()
-                        if await salary_range_element.count() > 0
-                        else ""
-                    )
-
-                    if (
-                        self._skip_this_job(job_quick_details)
-                        or not salary_in_range(salary_range)
-                        or not await job.is_visible()
-                    ):
-                        continue
-
-                    await job.scroll_into_view_if_needed()
-                    await job.click()
-
-                    await self.page.wait_for_selector("#jobsearch-ViewjobPaneWrapper")
-                    await self.page.wait_for_timeout(2000)
-                    job_details_container = self.page.locator(
-                        "#jobsearch-ViewjobPaneWrapper"
-                    ).nth(0)
-
-                    job_header_container = self.page.locator(
-                        ".jobsearch-HeaderContainer"
-                    ).nth(0)
-                    quick_apply_btn = job_header_container.get_by_role(
-                        "button", name="Apply with Indeed opens in a new tab"
-                    )
-                    job_title = (
-                        await job_header_container.get_by_test_id(
-                            "jobsearch-JobInfoHeader-title"
+                    jobs = await job_cards.all()
+                    total_jobs = await job_cards.count()
+                    if total_jobs == 0:
+                        print("No jobs found")
+                        break
+                    print(f"Found {total_jobs} jobs on this page")
+                    for job in jobs:
+                        save_job_toggle = job.get_by_role("listitem").get_by_role(
+                            "button", name="Save job Toggle", pressed=False
                         )
-                        .nth(0)
-                        .inner_text()
-                    )
-                    job_description = (
-                        await job_details_container.locator("#jobDescriptionText")
-                        .nth(0)
-                        .inner_text()
-                    )
+                        job_quick_details = await job.inner_text()
+                        job_link = await job.locator("h3.jobTitle a").get_attribute(
+                            "href"
+                        )
+                        job_link = urljoin("https://ph.indeed.com", job_link)
 
-                    job_evaluation_result = await self.evaluate_job(
-                        job_title=job_title,
-                        job_description=job_description,
-                        workflow_name="Indeed Job Evaluation",
-                    )
+                        salary_range_element = job.locator(
+                            "[data-testid~='salary-snippet-container']"
+                        )
+                        salary_range = (
+                            await salary_range_element.inner_text()
+                            if await salary_range_element.count() > 0
+                            else ""
+                        )
 
-                    if job_evaluation_result is None:
-                        continue
-                    run_result = job_evaluation_result.final_output.model_dump()
+                        if (
+                            self._skip_this_job(job_quick_details)
+                            or not salary_in_range(salary_range)
+                            or not await job.is_visible()
+                        ):
+                            continue
 
-                    if run_result.get("match") is False:
-                        continue
+                        await job.scroll_into_view_if_needed()
+                        await job.click()
 
-                    has_quick_apply_btn = await quick_apply_btn.count() > 0
+                        await self.page.wait_for_timeout(2000)
+                        job_details_container = self.page.get_by_test_id(
+                            "viewjob-main-content"
+                        ).nth(0)
 
-                    if not has_quick_apply_btn:
-                        continue
-                    try:
-                        if has_quick_apply_btn and run_result.get("match") is True:
-                            async with self.page.context.expect_page() as new_page:
-                                await quick_apply_btn.click()
-                            new_tab = await new_page.value
-                            await new_tab.wait_for_timeout(2500)
-                            await new_tab.wait_for_load_state("domcontentloaded")
-                            continue_btn = new_tab.get_by_role(
-                                "button", name="Continue"
+                        job_header_container = self.page.get_by_test_id(
+                            "desktop-job-header"
+                        ).nth(0)
+                        quick_apply_btn = job_header_container.get_by_test_id(
+                            "viewjob-indeed-apply"
+                        )
+                        job_header_actions = job_header_container.get_by_test_id(
+                            "job-header-actions"
+                        )
+                        save_job_btn = job_header_actions.get_by_test_id(
+                            "vj-saveJobButton"
+                        )
+                        job_title = (
+                            await job_header_container.get_by_test_id("vj-job-title")
+                            .nth(0)
+                            .inner_text()
+                        )
+                        job_description = (
+                            await job_details_container.get_by_test_id(
+                                "viewjob-job-content"
                             )
-                            error_occured_answering_form = False
-                            while await continue_btn.count() > 0:
-                                await continue_btn.nth(0).click()
-                                await new_tab.wait_for_load_state("domcontentloaded")
-                                await new_tab.wait_for_timeout(2000)
-                                has_questions = (
-                                    await new_tab.locator(".ia-Questions").count() > 0
-                                )
+                            .nth(0)
+                            .inner_text()
+                        )
 
-                                if has_questions:
-                                    form = new_tab.locator(".ia-Questions").nth(0)
-                                    form_html_string = await form.evaluate(
-                                        "element => element.outerHTML"
+                        job_evaluation_result = await self.evaluate_job(
+                            job_title=job_title,
+                            job_description=job_description,
+                            workflow_name="Indeed Job Evaluation",
+                        )
+
+                        if job_evaluation_result is None:
+                            continue
+                        run_result = job_evaluation_result.final_output.model_dump()
+
+                        if run_result.get("match") is False:
+                            continue
+
+                        has_quick_apply_btn = await quick_apply_btn.count() > 0
+
+                        if not has_quick_apply_btn and run_result.get("Match") is True:
+                            await save_job_btn.click()
+                            self.append_job(
+                                RunSummarry(
+                                    type=Type.SAVED,
+                                    job_title=job_title,
+                                    job_link=job_link,
+                                    job_description=job_description,
+                                    match=run_result["match"],
+                                    percentage=run_result["percentage"],
+                                    reasoning=run_result["reasoning"],
+                                    matched_skills=run_result["matched_skills"],
+                                    missing_skills=run_result["missing_skills"],
+                                )
+                            )
+                            await self.wait_for_timeout(2)
+
+                            continue
+                        try:
+                            if has_quick_apply_btn and run_result.get("match") is True:
+                                async with self.page.context.expect_page() as new_page:
+                                    await quick_apply_btn.click()
+                                new_tab = await new_page.value
+                                await new_tab.wait_for_load_state(
+                                    state="load", timeout=10_000
+                                )
+                                await new_tab.wait_for_timeout(5_000)
+                                continue_btn = new_tab.get_by_test_id("continue-button")
+                                print(
+                                    "Outside loop: Num of continue btn",
+                                    await continue_btn.count(),
+                                )
+                                error_occured_answering_form = False
+                                while await continue_btn.count() == 1:
+                                    print(
+                                        "Num of continue btn",
+                                        await continue_btn.count(),
                                     )
-                                    simplified_form_html = extract_all_form_fields(
-                                        form_html_string,
+                                    await continue_btn.nth(0).click()
+
+                                    await new_tab.wait_for_timeout(2000)
+                                    has_questions = (
+                                        await new_tab.locator(".ia-Questions").count()
+                                        > 0
                                     )
-                                    print(simplified_form_html)
-                                    successfully_answered_form = (
-                                        await self._answer_form_questions(
+
+                                    if has_questions:
+                                        form = new_tab.locator(".ia-Questions").nth(0)
+                                        form_html_string = await form.evaluate(
+                                            "element => element.outerHTML"
+                                        )
+                                        simplified_form_html = extract_all_form_fields(
+                                            form_html_string,
+                                        )
+                                        successfully_answered_form = await self._answer_form_questions(
                                             new_tab=new_tab,
                                             simplified_form_html=simplified_form_html,
                                         )
-                                    )
-                                    if not successfully_answered_form:
-                                        error_occured_answering_form = True
-                                        break
-                            if not error_occured_answering_form:
-                                await new_tab.get_by_test_id(
-                                    "submit-application-button"
-                                ).click()
-                                await new_tab.wait_for_timeout(2500)
-                                await new_tab.close()
-                            else:
-                                continue
-                    except Exception as error:  # noqa: BLE001
-                        print("Error occured...", error)
-                        print("Continuing the loop")
-                        await new_tab.close()
-                        continue
-                next_btn = self.page.get_by_test_id("pagination-page-next")
-                if await next_btn.count() == 0:
-                    break
-                await next_btn.click()
-                await self.wait_for_timeout(2)
 
-        await self._clean_up()
+                                        if not successfully_answered_form:
+                                            error_occured_answering_form = True
+                                            break
+                                if not error_occured_answering_form:
+                                    await new_tab.get_by_test_id(
+                                        "submit-application-button"
+                                    ).click()
+                                    self.append_job(
+                                        RunSummarry(
+                                            type=Type.APPLIED,
+                                            job_title=job_title,
+                                            job_description=job_description,
+                                            job_link=job_link,
+                                            match=run_result["match"],
+                                            percentage=run_result["percentage"],
+                                            reasoning=run_result["reasoning"],
+                                            matched_skills=run_result["matched_skills"],
+                                            missing_skills=run_result["missing_skills"],
+                                        )
+                                    )
+                                    await new_tab.wait_for_timeout(2500)
+                                    await new_tab.close()
+                                else:
+                                    continue
+                        except Exception as error:  # noqa: BLE001
+                            print("Error occured...", error)
+                            print("Continuing the loop")
+                            await new_tab.close()
+                            continue
+                    next_btn = self.page.get_by_test_id("pagination-page-next")
+                    if await next_btn.count() == 0:
+                        break
+                    await next_btn.click()
+                    await self.wait_for_timeout(2)
+        except Exception as error:  # noqa: BLE001
+            print("Error", error)
+            raise
 
 
 if __name__ == "__main__":
@@ -323,3 +370,6 @@ if __name__ == "__main__":
         asyncio.run(indeed.automate_job_search())
     finally:
         print("Execution finished")
+        print("Genarating report")
+        asyncio.run(indeed.generate_html_run_summary(page="indeed"))
+        asyncio.run(indeed._clean_up())

@@ -1,11 +1,34 @@
+from datetime import datetime
+from enum import Enum
 from pathlib import Path
 
 import openai
 from agents import Runner, RunResult, trace
+from jinja2 import Template
 from playwright.async_api import Page, async_playwright
 from playwright_stealth import Stealth
+from pydantic import BaseModel
 
 from custom_agents.job_analyzer import job_analyzer_agent
+
+html_path = Path(__file__).parent / "utils" / "run_summary.html"
+
+
+class Type(str, Enum):
+    APPLIED = "APPLIED"
+    SAVED = "SAVED"
+
+
+class RunSummarry(BaseModel):
+    type: Type = Type.APPLIED
+    job_title: str
+    job_description: str
+    job_link: str | None = None
+    match: bool
+    percentage: int
+    reasoning: str
+    matched_skills: list[str]
+    missing_skills: list[str]
 
 
 class BasePage:
@@ -14,6 +37,7 @@ class BasePage:
         self._context = None
         self.page: Page | None = None
         self.search_keys: list = []
+        self.run_summary: list[RunSummarry] = []
 
     async def handle_new_tab(self, new_tab):
         await Stealth().apply_stealth_async(new_tab)
@@ -33,6 +57,7 @@ class BasePage:
             "AWS",
             "DevOps",
         ]
+        self.run_summary = []
         user_data_dir = Path(
             rf"C:\Users\xtian\AppData\Local\BraveSoftware\Brave-Browser\{profile}"
         )
@@ -126,6 +151,8 @@ class BasePage:
             "mindrift",
             "hired",
             "amcs",
+            "dataannotation",
+            "data annotation",
         ]
 
         description = job_description.lower()
@@ -169,6 +196,44 @@ class BasePage:
         return any(
             company_name.lower() in company.lower() for company in companies_to_skip
         )
+
+    def append_job(self, run_summary: RunSummarry):
+        self.run_summary.append(run_summary)
+
+    def generate_html_run_summary(self, page: str = "jobstreet"):
+        template = Template(html_path.read_text(encoding="utf-8"))
+        applied_jobs = [
+            summary for summary in self.run_summary if summary.type == Type.APPLIED
+        ]
+        saved_jobs = [
+            summary for summary in self.run_summary if summary.type == Type.SAVED
+        ]
+        average_match = (
+            sum(summary.percentage for summary in self.run_summary)
+            / len(self.run_summary)
+            if self.run_summary
+            else 0
+        )
+
+        output = template.render(
+            total_jobs=len(self.run_summary),
+            applied_count=len(applied_jobs),
+            saved_count=len(saved_jobs),
+            average_match=average_match,
+            applied_jobs=applied_jobs,
+            saved_jobs=saved_jobs,
+        )
+        timestamp_folder = datetime.now().strftime("%Y-%m-%d")  # noqa: DTZ005
+        timestamp = datetime.now().strftime("%Y-%m-%d_%I-%M %p")  # noqa: DTZ005
+
+        output_path = (
+            Path("run_summaries")
+            / f"{page}"
+            / f"{timestamp_folder}"
+            / f"{page}_run_summary_{timestamp}.html"
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(output, encoding="utf-8")
 
     async def evaluate_job(
         self,

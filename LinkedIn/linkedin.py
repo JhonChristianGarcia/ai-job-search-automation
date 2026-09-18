@@ -7,7 +7,7 @@ import openai
 from agents import Runner, trace
 from playwright.async_api import FrameLocator, Locator
 
-from base_page import BasePage
+from base_page import BasePage, RunSummarry, Type
 from custom_agents.form_evaluator import form_evaluator
 from custom_agents.form_fields_extractor import fields_extractor_agent
 from utils.linked_in_extract_required_fields import linked_in_xtract_required_fields
@@ -257,7 +257,7 @@ class LinkedIn(BasePage):
 
         try:
             for key in self.search_keys:
-                await self._search_and_filter(keyword=key, listing_time=7)
+                await self._search_and_filter(keyword=key, listing_time=1)
                 while True:
                     job_cards = self.frame.locator(
                         'li[data-occludable-job-id]:not([aria-hidden="true"])'
@@ -271,11 +271,13 @@ class LinkedIn(BasePage):
                         job_state = card.locator(
                             ".job-card-container__footer-job-state"
                         )
-                        if (await job_state.count()) == 1 and (
-                            await job_state.inner_text()
-                        ) == "Viewed":
-                            print("Viewed already, skipping")
-                            continue
+                        if (await job_state.count()) == 1:
+                            if (
+                                await job_state.inner_text()
+                            ) == "Viewed" or await job_state.inner_text() == "Saved":
+                                print("Viewed or saved already, skipping")
+                                continue
+
                         card_details = await card.inner_text()
                         print("Card details", card_details)
                         applied = "Applied" in card_details
@@ -307,14 +309,19 @@ class LinkedIn(BasePage):
                             company_name=company_name
                         ):
                             continue
-
-                        job_title = await job_details_section.locator(
+                        job_title_element = job_details_section.locator(
                             ".job-details-jobs-unified-top-card__job-title"
-                        ).inner_text()
+                        )
+                        job_title = await job_title_element.inner_text()
+                        job_link = await (
+                            job_title_element.locator("a")
+                            .nth(0)
+                            .evaluate("el => el.href")
+                        )
+
                         job_description = await job_details_section.locator(
                             "#job-details"
                         ).inner_text()
-
                         job_evaluation_result = await self.evaluate_job(
                             job_title=job_title,
                             job_description=job_description,
@@ -336,10 +343,25 @@ class LinkedIn(BasePage):
                             await easy_apply_btn.count() == 0
                             and run_result.get("match") is True
                         ):
-                            save_btn = self.frame.locator(".jobs-save-button")
+                            save_btn = self.frame.locator(".jobs-save-button").filter(
+                                has_text=re.compile(r"^Save$")
+                            )
                             if await save_btn.count() > 0:
                                 await save_btn.nth(0).click()
                                 await self.wait_for_timeout(2)
+                                self.append_job(
+                                    run_summary=RunSummarry(
+                                        type=Type.SAVED,
+                                        job_description=job_description,
+                                        job_title=job_title,
+                                        job_link=job_link,
+                                        match=run_result["match"],
+                                        percentage=run_result["percentage"],
+                                        reasoning=run_result["reasoning"],
+                                        matched_skills=run_result["matched_skills"],
+                                        missing_skills=run_result["missing_skills"],
+                                    )
+                                )
                             continue
                         ### INFO: Clicked easy apply btn - opens up the modal
                         await easy_apply_btn.nth(0).click()
@@ -357,9 +379,7 @@ class LinkedIn(BasePage):
                                 ).click()
                                 await self.page.wait_for_timeout(2500)
                                 await self.page.wait_for_load_state("domcontentloaded")
-                                await self.frame.get_by_role(
-                                    "button", name="Not now"
-                                ).click()
+                                await self.page.keyboard.press("Escape")
                                 await self.page.wait_for_timeout(2500)
                                 continue
 
@@ -508,6 +528,18 @@ class LinkedIn(BasePage):
                             await submit_application_btn.click()
                             await self.page.wait_for_timeout(1500)
                             await self.page.keyboard.press("Escape")
+                            self.append_job(
+                                run_summary=RunSummarry(
+                                    job_description=job_description,
+                                    job_title=job_title,
+                                    job_link=job_link,
+                                    match=run_result["match"],
+                                    percentage=run_result["percentage"],
+                                    reasoning=run_result["reasoning"],
+                                    matched_skills=run_result["matched_skills"],
+                                    missing_skills=run_result["missing_skills"],
+                                )
+                            )
                         except Exception as error:  # noqa: BLE001
                             print("Error occured ", error)
                             await self._handle_form_failure(modal=modal)
@@ -592,4 +624,7 @@ if __name__ == "__main__":
         print("Retrying...")
         asyncio.run(linkedin.automate_job_search())
     finally:
+        print(f"Applied to {len(linkedin.run_summary)}")
+        print("Generating summary")
+        linkedin.generate_html_run_summary(page="linkedin")
         print("Execution finished")

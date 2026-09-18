@@ -10,6 +10,9 @@ def salary_in_range(
     if "$" in salary_range or re.search(r"\bUSD\b", salary_range, re.IGNORECASE):
         return True
 
+    if "hour" in salary_range:
+        return True
+
     salary_pattern = r"(?:₱|PHP)\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)"
 
     salaries = re.findall(salary_pattern, salary_range, re.IGNORECASE)

@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Job Search Run Summary</title>
+
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 40px 20px;
+        background: #f6f7fb;
+        color: #1f2937;
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      /* Header */
+
+      .header {
+        margin-bottom: 28px;
+      }
+
+      .header h1 {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 750;
+        letter-spacing: -0.7px;
+        color: #111827;
+      }
+
+      .header p {
+        margin: 7px 0 0;
+        color: #6b7280;
+        font-size: 14px;
+      }
+
+      /* Stats */
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin-bottom: 32px;
+      }
+
+      .stat {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 17px 18px;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        font-weight: 650;
+        color: #6b7280;
+        margin-bottom: 5px;
+      }
+
+      .stat-value {
+        font-size: 25px;
+        font-weight: 750;
+        color: #111827;
+      }
+
+      /* Section */
+
+      .section {
+        margin-bottom: 30px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .section-header h2 {
+        margin: 0;
+        font-size: 19px;
+        color: #111827;
+      }
+
+      .count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 26px;
+        height: 23px;
+        padding: 0 8px;
+        border-radius: 999px;
+        background: #eef2ff;
+        color: #4f46e5;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      /* Table */
+
+      .table-wrapper {
+        overflow-x: auto;
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      th {
+        padding: 11px 14px;
+        text-align: left;
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+        color: #6b7280;
+        font-size: 11px;
+        font-weight: 750;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        white-space: nowrap;
+      }
+
+      td {
+        padding: 14px;
+        vertical-align: top;
+        border-bottom: 1px solid #f0f1f3;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      tbody tr:hover {
+        background: #fafafa;
+      }
+
+      /* Job */
+
+      .job-title {
+        font-weight: 700;
+        color: #111827;
+        min-width: 180px;
+      }
+
+      .job-description {
+        margin-top: 5px;
+        max-width: 360px;
+        color: #6b7280;
+        line-height: 1.45;
+
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* Match */
+
+      .match {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        min-width: 58px;
+        padding: 5px 9px;
+
+        border-radius: 7px;
+
+        font-size: 12px;
+        font-weight: 750;
+      }
+
+      .match-high {
+        background: #ecfdf5;
+        color: #047857;
+      }
+
+      .match-medium {
+        background: #fffbeb;
+        color: #b45309;
+      }
+
+      .match-low {
+        background: #fef2f2;
+        color: #b91c1c;
+      }
+
+      /* Skills */
+
+      .skills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        max-width: 260px;
+      }
+
+      .skill {
+        display: inline-block;
+        padding: 4px 7px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .matched {
+        background: #ecfdf5;
+        color: #047857;
+      }
+
+      .missing {
+        background: #fff7ed;
+        color: #c2410c;
+      }
+
+      .skills-label {
+        margin-bottom: 6px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+
+      .missing-skills {
+        margin-top: 9px;
+      }
+
+      /* Reasoning */
+
+      .reasoning {
+        max-width: 400px;
+        color: #4b5563;
+        line-height: 1.5;
+      }
+
+      /* Empty */
+
+      .empty {
+        padding: 25px;
+        text-align: center;
+        color: #9ca3af;
+        font-size: 13px;
+      }
+
+      /* Footer */
+
+      .footer {
+        margin-top: 35px;
+        padding-top: 16px;
+        border-top: 1px solid #e5e7eb;
+        text-align: center;
+        color: #9ca3af;
+        font-size: 11px;
+      }
+
+      /* Responsive */
+
+      @media (max-width: 800px) {
+        .stats {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (max-width: 500px) {
+        body {
+          padding: 24px 12px;
+        }
+
+        .stats {
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+
+        .stat {
+          padding: 13px;
+        }
+      }
+
+      @media print {
+        body {
+          padding: 0;
+          background: white;
+        }
+
+        .table-wrapper,
+        .stat {
+          border-color: #ddd;
+        }
+
+        tbody tr:hover {
+          background: transparent;
+        }
+      }
+      .job-title a {
+        color: #111827;
+        text-decoration: none;
+      }
+
+      .job-title a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <!-- Header -->
+
+      <header class="header">
+        <h1>Job Search Run Summary</h1>
+        <p>{{ run_date }}</p>
+      </header>
+
+      <!-- Stats -->
+
+      <section class="stats">
+        <div class="stat">
+          <div class="stat-label">Total Jobs</div>
+          <div class="stat-value">{{ total_jobs }}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-label">Applied</div>
+          <div class="stat-value">{{ applied_count }}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-label">Saved</div>
+          <div class="stat-value">{{ saved_count }}</div>
+        </div>
+
+        <div class="stat">
+          <div class="stat-label">Average Match</div>
+          <div class="stat-value">{{ average_match }}%</div>
+        </div>
+      </section>
+
+      <!-- Applied -->
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Applied</h2>
+          <span class="count">{{ applied_count }}</span>
+        </div>
+
+        <div class="table-wrapper">
+          {% if applied_jobs %}
+
+          <table>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Match</th>
+                <th>Skills</th>
+                <th>Reasoning</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for job in applied_jobs %}
+
+              <tr>
+                <td>
+                  <div class="job-title">
+                    <a
+                      href="{{ job.job_link }}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ job.job_title }}
+                    </a>
+                  </div>
+
+                  <div class="job-description">{{ job.job_description }}</div>
+                </td>
+
+                <td>
+                  {% if job.percentage >= 85 %}
+                  <span class="match match-high"> {{ job.percentage }}% </span>
+                  {% elif job.percentage >= 70 %}
+                  <span class="match match-medium">
+                    {{ job.percentage }}%
+                  </span>
+                  {% else %}
+                  <span class="match match-low"> {{ job.percentage }}% </span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  <div class="skills-label">Matched</div>
+
+                  <div class="skills">
+                    {% for skill in job.matched_skills %}
+                    <span class="skill matched"> {{ skill }} </span>
+                    {% endfor %}
+                  </div>
+
+                  {% if job.missing_skills %}
+
+                  <div class="missing-skills">
+                    <div class="skills-label">Missing</div>
+
+                    <div class="skills">
+                      {% for skill in job.missing_skills %}
+                      <span class="skill missing"> {{ skill }} </span>
+                      {% endfor %}
+                    </div>
+                  </div>
+
+                  {% endif %}
+                </td>
+
+                <td>
+                  <div class="reasoning">{{ job.reasoning }}</div>
+                </td>
+              </tr>
+
+              {% endfor %}
+            </tbody>
+          </table>
+
+          {% else %}
+
+          <div class="empty">
+            No applications were submitted during this run.
+          </div>
+
+          {% endif %}
+        </div>
+      </section>
+
+      <!-- Saved -->
+
+      <section class="section">
+        <div class="section-header">
+          <h2>Saved</h2>
+          <span class="count">{{ saved_count }}</span>
+        </div>
+
+        <div class="table-wrapper">
+          {% if saved_jobs %}
+
+          <table>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Match</th>
+                <th>Skills</th>
+                <th>Reasoning</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for job in saved_jobs %}
+
+              <tr>
+                <td>
+                  <div class="job-title">
+                    <a
+                      href="{{ job.job_link }}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ job.job_title }}
+                    </a>
+                  </div>
+
+                  <div class="job-description">{{ job.job_description }}</div>
+                </td>
+
+                <td>
+                  {% if job.percentage >= 85 %}
+                  <span class="match match-high"> {{ job.percentage }}% </span>
+                  {% elif job.percentage >= 70 %}
+                  <span class="match match-medium">
+                    {{ job.percentage }}%
+                  </span>
+                  {% else %}
+                  <span class="match match-low"> {{ job.percentage }}% </span>
+                  {% endif %}
+                </td>
+
+                <td>
+                  <div class="skills-label">Matched</div>
+
+                  <div class="skills">
+                    {% for skill in job.matched_skills %}
+                    <span class="skill matched"> {{ skill }} </span>
+                    {% endfor %}
+                  </div>
+
+                  {% if job.missing_skills %}
+
+                  <div class="missing-skills">
+                    <div class="skills-label">Missing</div>
+
+                    <div class="skills">
+                      {% for skill in job.missing_skills %}
+                      <span class="skill missing"> {{ skill }} </span>
+                      {% endfor %}
+                    </div>
+                  </div>
+
+                  {% endif %}
+                </td>
+
+                <td>
+                  <div class="reasoning">{{ job.reasoning }}</div>
+                </td>
+              </tr>
+
+              {% endfor %}
+            </tbody>
+          </table>
+
+          {% else %}
+
+          <div class="empty">No jobs were saved during this run.</div>
+
+          {% endif %}
+        </div>
+      </section>
+
+      <footer class="footer">
+        Generated automatically by Job Search Automation
+      </footer>
+    </div>
+  </body>
+</html>
