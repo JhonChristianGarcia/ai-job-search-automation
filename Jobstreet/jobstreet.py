@@ -26,9 +26,7 @@ JOBSTREET_LINK = "https://ph.jobstreet.com/"
 
 class Jobstreet(BasePage):
     def __init__(self):
-        self._playwright = None
-        self._context = None
-        self.page: Page | None = None
+        super().__init__()
 
         # Page elements
         self.search: Locator | None = None
@@ -149,8 +147,7 @@ class Jobstreet(BasePage):
                                     await checkbox_element.check()
                             case "radio":
                                 radio_element = new_tab.locator(field_answer["locator"])
-                                await radio_element.scroll_into_view_if_needed()
-                                await radio_element.click()
+                                await radio_element.click(force=True)
                             case "textarea" | "text":
                                 text_area_element = new_tab.locator(
                                     field_answer["locator"]
@@ -222,99 +219,103 @@ class Jobstreet(BasePage):
                             or not salary_in_range(job_salary)
                         ):
                             continue
-                        await job.scroll_into_view_if_needed()
-                        await job.click()
-                        await self._wait_for_timeout()
+                        new_tab = None
+                        try:
+                            await self._click_outside_modal()
+                            await job.scroll_into_view_if_needed()
+                            await job.click()
+                            await self._wait_for_timeout()
 
-                        job_details_section = self.page.locator(
-                            '[data-automation="jobDetailsPage"]'
-                        ).nth(0)
-                        await expect(job_details_section).to_be_visible()
-                        salary_range_element = job_details_section.locator(
-                            '[data-automation="job-detail-salary"]'
-                        )
-                        salary_range_inside_job_details = (
-                            await salary_range_element.inner_text()
-                            if await salary_range_element.count()
-                            else ""
-                        )
-                        if not salary_in_range(salary_range_inside_job_details):
-                            continue
-                        quick_apply_btn = job_details_section.locator(
-                            '[data-automation="job-detail-apply"]',
-                            has_text=re.compile(r"quick apply", re.I),
-                        ).nth(0)
-                        job_details_section.locator(
-                            '[data-automation="job-detail-apply"]',
-                            has_text=re.compile(r"apply", re.I),
-                        ).nth(0)
+                            job_details_section = self.page.locator(
+                                '[data-automation="jobDetailsPage"]'
+                            ).nth(0)
+                            await expect(job_details_section).to_be_visible()
+                            salary_range_element = job_details_section.locator(
+                                '[data-automation="job-detail-salary"]'
+                            )
+                            salary_range_inside_job_details = (
+                                await salary_range_element.inner_text()
+                                if await salary_range_element.count()
+                                else ""
+                            )
+                            if not salary_in_range(salary_range_inside_job_details):
+                                continue
+                            quick_apply_btn = job_details_section.locator(
+                                '[data-automation="job-detail-apply"]',
+                                has_text=re.compile(r"quick apply", re.I),
+                            ).nth(0)
+                            job_details_section.locator(
+                                '[data-automation="job-detail-apply"]',
+                                has_text=re.compile(r"apply", re.I),
+                            ).nth(0)
 
-                        save_btn = job_details_section.get_by_test_id(
-                            "jdv-savedjob"
-                        ).nth(0)
+                            save_btn = job_details_section.get_by_test_id(
+                                "jdv-savedjob"
+                            ).nth(0)
 
-                        if (
-                            await quick_apply_btn.count() == 0
-                            and await save_btn.count() == 0
-                        ):
-                            print("Job has no quick apply or save button. Skipping.")
-                            continue
-                        job_title_element = job_details_section.get_by_role("link").nth(
-                            0
-                        )
-                        job_url = await job_title_element.get_attribute("href")
-                        job_url = urljoin(self.page.url, job_url)
-                        print(job_url)
-                        if not await job_title_element.inner_text():
+                            if (
+                                await quick_apply_btn.count() == 0
+                                and await save_btn.count() == 0
+                            ):
+                                print(
+                                    "Job has no quick apply or save button. Skipping."
+                                )
+                                continue
                             job_title_element = job_details_section.get_by_role(
                                 "link"
-                            ).nth(1)
-                        job_description_section = job_details_section.locator(
-                            '[data-automation="jobAdDetails"]'
-                        )
-
-                        already_saved = (await save_btn.inner_text()) == "Unsave"
-                        if already_saved:
-                            continue
-
-                        job_title = await job_title_element.inner_text()
-                        job_description = await job_description_section.inner_text()
-
-                        job_evaluation_result = await self.evaluate_job(
-                            job_title=job_title,
-                            job_description=job_description,
-                            workflow_name="Jobstreet Job Evaluation",
-                        )
-
-                        if job_evaluation_result is None:
-                            continue
-
-                        await self._wait_for_timeout()
-
-                        run_result = job_evaluation_result.final_output.model_dump()
-                        has_quick_apply_btn = await quick_apply_btn.count() > 0
-                        if (
-                            not has_quick_apply_btn
-                            and run_result.get("match") is True
-                            and run_result.get("percentage") >= 80
-                            and not already_saved
-                        ):
-                            await save_btn.click()
-                            self.append_job(
-                                RunSummarry(
-                                    type=Type.SAVED,
-                                    job_title=job_title,
-                                    job_description=job_description,
-                                    job_link=job_url,
-                                    match=run_result["match"],
-                                    percentage=run_result["percentage"],
-                                    reasoning=run_result["reasoning"],
-                                    matched_skills=run_result["matched_skills"],
-                                    missing_skills=run_result["missing_skills"],
-                                )
+                            ).nth(0)
+                            job_url = await job_title_element.get_attribute("href")
+                            job_url = urljoin(self.page.url, job_url)
+                            print(job_url)
+                            if not await job_title_element.inner_text():
+                                job_title_element = job_details_section.get_by_role(
+                                    "link"
+                                ).nth(1)
+                            job_description_section = job_details_section.locator(
+                                '[data-automation="jobAdDetails"]'
                             )
-                            continue
-                        try:
+
+                            already_saved = (await save_btn.inner_text()) == "Unsave"
+                            if already_saved:
+                                continue
+
+                            job_title = await job_title_element.inner_text()
+                            job_description = await job_description_section.inner_text()
+
+                            job_evaluation_result = await self.evaluate_job(
+                                job_title=job_title,
+                                job_description=job_description,
+                                workflow_name="Jobstreet Job Evaluation",
+                            )
+
+                            if job_evaluation_result is None:
+                                continue
+
+                            await self._wait_for_timeout()
+
+                            run_result = job_evaluation_result.final_output.model_dump()
+                            has_quick_apply_btn = await quick_apply_btn.count() > 0
+                            if (
+                                not has_quick_apply_btn
+                                and run_result.get("match") is True
+                                and run_result.get("percentage") >= 80
+                                and not already_saved
+                            ):
+                                await save_btn.click()
+                                self.append_job(
+                                    RunSummarry(
+                                        type=Type.SAVED,
+                                        job_title=job_title,
+                                        job_description=job_description,
+                                        job_link=job_url,
+                                        match=run_result["match"],
+                                        percentage=run_result["percentage"],
+                                        reasoning=run_result["reasoning"],
+                                        matched_skills=run_result["matched_skills"],
+                                        missing_skills=run_result["missing_skills"],
+                                    )
+                                )
+                                continue
                             if has_quick_apply_btn and run_result.get("match") is True:
                                 async with self.page.context.expect_page() as new_page:
                                     await quick_apply_btn.click()
@@ -377,7 +378,8 @@ class Jobstreet(BasePage):
                                 )
                         except Exception as error:  # noqa: BLE001
                             print("Error occured", error)
-                            await new_tab.close()
+                            if new_tab is not None and not new_tab.is_closed():
+                                await new_tab.close()
                             continue
 
                     next_btn = self.page.locator(
@@ -391,19 +393,30 @@ class Jobstreet(BasePage):
                     await self._wait_for_timeout()
                     # with open("output.json", "w", encoding="utf-8") as f:
                     #     json.dump([summary.model_dump() for summary in self.run_summary], f, indent=4, ensure_ascii=False )
+
         except Exception as error:
             print("Something went wrong", error)
             raise
 
 
-if __name__ == "__main__":
+async def main():
     jobstreet = Jobstreet()
 
     try:
-        asyncio.run(jobstreet.automate_job_search())
-    except Exception:  # noqa: BLE001
+        await jobstreet.automate_job_search()
+    except Exception as error:  # noqa: BLE001
+        print("Something went wrong:", error)
         print("Retrying...")
-        asyncio.run(jobstreet.automate_job_search())
+        await jobstreet._clean_up()
+        try:
+            await jobstreet.automate_job_search()
+        except Exception as retry_error:  # noqa: BLE001
+            print("Retry also failed:", retry_error)
     finally:
         print("Generating HTML report...")
         jobstreet.generate_html_run_summary(page="jobstreet")
+        await jobstreet._clean_up()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

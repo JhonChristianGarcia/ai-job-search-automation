@@ -17,16 +17,29 @@ LINKEDIN_PAGE_LINK = "https://www.linkedin.com/jobs/"
 
 class LinkedIn(BasePage):
     def __init__(self):
+        super().__init__()
         self.search: Locator | None = None
         self.frame = FrameLocator | None
 
-    async def _handle_form_failure(self, modal: Locator):
+    async def _handle_form_failure(self, modal: Locator | None):
         print("Unable to answer questions, closing...")
         try:
-            await modal.get_by_role("button", name="Dismiss").nth(0).click()
-            await modal.get_by_role("button", name="Discard").nth(0).click()
+            if modal is not None:
+                await modal.get_by_role("button", name="Dismiss").nth(0).click()
+                await modal.get_by_role("button", name="Discard").nth(0).click()
         except Exception as e:  # noqa: BLE001
             print(f"Failed to close modal: {e}")
+        await self._dismiss_blocking_overlay()
+
+    async def _dismiss_blocking_overlay(self):
+        """Close any leftover modal overlay left over from a previous job card so
+        it doesn't intercept clicks on the next one."""
+        overlay = self.page.locator(".artdeco-modal-overlay")
+        for _ in range(3):
+            if await overlay.count() == 0:
+                return
+            await self.page.keyboard.press("Escape")
+            await self.page.wait_for_timeout(500)
 
     async def fill_in_form_fields(
         self,
@@ -256,8 +269,8 @@ class LinkedIn(BasePage):
         self.frame = self.page.locator('[data-testid="interop-iframe"]').content_frame
 
         try:
-            for key in self.search_keys:
-                await self._search_and_filter(keyword=key, listing_time=1)
+            for i, key in enumerate(self.search_keys, start=1):
+                await self._search_and_filter(keyword=key, listing_time=1, run_time=i)
                 while True:
                     job_cards = self.frame.locator(
                         'li[data-occludable-job-id]:not([aria-hidden="true"])'
@@ -285,73 +298,282 @@ class LinkedIn(BasePage):
                         if self._skip_this_job(card_details) or applied or viewed:
                             continue
 
-                        await card.evaluate(
-                            "el => el.scrollIntoView({ block: 'center', behavior: 'smooth' })"
-                        )
-                        await self.page.wait_for_timeout(500)
+                        modal = None
+                        try:
+                            await self._dismiss_blocking_overlay()
 
-                        clickable_target = card.locator(
-                            '.job-card-container:not([aria-hidden="true"])'
-                        ).first
-
-                        await clickable_target.click()
-                        await self.page.wait_for_timeout(1500)
-
-                        job_details_section = self.frame.locator(".jobs-details").first
-                        company_name = await self.frame.locator(
-                            ".job-details-jobs-unified-top-card__company-name"
-                        ).first.inner_text()
-
-                        already_applied = (
-                            "Applied" in await job_details_section.inner_text()
-                        )
-                        if already_applied or self._skip_this_company(
-                            company_name=company_name
-                        ):
-                            continue
-                        job_title_element = job_details_section.locator(
-                            ".job-details-jobs-unified-top-card__job-title"
-                        )
-                        job_title = await job_title_element.inner_text()
-                        job_link = await (
-                            job_title_element.locator("a")
-                            .nth(0)
-                            .evaluate("el => el.href")
-                        )
-
-                        job_description = await job_details_section.locator(
-                            "#job-details"
-                        ).inner_text()
-                        job_evaluation_result = await self.evaluate_job(
-                            job_title=job_title,
-                            job_description=job_description,
-                            workflow_name="LinkedIn Job Evaluation",
-                        )
-
-                        if job_evaluation_result is None:
-                            continue
-                        run_result = job_evaluation_result.final_output.model_dump()
-
-                        if run_result.get("match") is False:
-                            continue
-
-                        easy_apply_btn = self.frame.get_by_role(
-                            "button", name=re.compile(r"easy apply", re.IGNORECASE)
-                        )
-
-                        if (
-                            await easy_apply_btn.count() == 0
-                            and run_result.get("match") is True
-                        ):
-                            save_btn = self.frame.locator(".jobs-save-button").filter(
-                                has_text=re.compile(r"^Save$")
+                            await card.evaluate(
+                                "el => el.scrollIntoView({ block: 'center', behavior: 'smooth' })"
                             )
-                            if await save_btn.count() > 0:
-                                await save_btn.nth(0).click()
-                                await self.wait_for_timeout(2)
+                            await self.page.wait_for_timeout(500)
+
+                            clickable_target = card.locator(
+                                '.job-card-container:not([aria-hidden="true"])'
+                            ).first
+
+                            await clickable_target.click()
+                            await self.page.wait_for_timeout(1500)
+
+                            job_details_section = self.frame.locator(
+                                ".jobs-details"
+                            ).first
+                            company_name = await self.frame.locator(
+                                ".job-details-jobs-unified-top-card__company-name"
+                            ).first.inner_text()
+
+                            already_applied = (
+                                "Applied" in await job_details_section.inner_text()
+                            )
+                            if already_applied or self._skip_this_company(
+                                company_name=company_name
+                            ):
+                                continue
+                            job_title_element = job_details_section.locator(
+                                ".job-details-jobs-unified-top-card__job-title"
+                            )
+                            job_title = await job_title_element.inner_text()
+                            job_link = await (
+                                job_title_element.locator("a")
+                                .nth(0)
+                                .evaluate("el => el.href")
+                            )
+
+                            job_description = await job_details_section.locator(
+                                "#job-details"
+                            ).inner_text()
+                            job_evaluation_result = await self.evaluate_job(
+                                job_title=job_title,
+                                job_description=job_description,
+                                workflow_name="LinkedIn Job Evaluation",
+                            )
+
+                            if job_evaluation_result is None:
+                                continue
+                            run_result = (
+                                job_evaluation_result.final_output.model_dump()
+                            )
+
+                            if run_result.get("match") is False:
+                                continue
+
+                            easy_apply_btn = self.frame.get_by_role(
+                                "button", name=re.compile(r"easy apply", re.IGNORECASE)
+                            )
+
+                            if (
+                                await easy_apply_btn.count() == 0
+                                and run_result.get("match") is True
+                            ):
+                                save_btn = self.frame.locator(
+                                    ".jobs-save-button"
+                                ).filter(has_text=re.compile(r"^Save$"))
+                                if await save_btn.count() > 0:
+                                    await save_btn.nth(0).click()
+                                    await self.wait_for_timeout(2)
+                                    self.append_job(
+                                        run_summary=RunSummarry(
+                                            type=Type.SAVED,
+                                            job_description=job_description,
+                                            job_title=job_title,
+                                            job_link=job_link,
+                                            match=run_result["match"],
+                                            percentage=run_result["percentage"],
+                                            reasoning=run_result["reasoning"],
+                                            matched_skills=run_result[
+                                                "matched_skills"
+                                            ],
+                                            missing_skills=run_result[
+                                                "missing_skills"
+                                            ],
+                                        )
+                                    )
+                                continue
+                            ### INFO: Clicked easy apply btn - opens up the modal
+                            await easy_apply_btn.nth(0).click()
+
+                            try:
+                                await self.page.wait_for_timeout(1500)
+                                modal = self.frame.locator("[data-test-modal]")
+
+                                next_btn = modal.get_by_role(
+                                    "button", name="Continue to next step"
+                                )
+                                if await next_btn.count() == 0:
+                                    await modal.get_by_role(
+                                        "button", name="Submit application"
+                                    ).click()
+                                    await self.page.wait_for_timeout(2500)
+                                    await self.page.wait_for_load_state(
+                                        "domcontentloaded"
+                                    )
+                                    await self.page.keyboard.press("Escape")
+                                    await self.page.wait_for_timeout(2500)
+                                    continue
+
+                                able_to_answer_form = True
+                                while await next_btn.count() == 1:
+                                    ### INFO: Clicked next button
+                                    await next_btn.click()
+                                    await self.page.wait_for_load_state(
+                                        "domcontentloaded"
+                                    )
+                                    await self.page.wait_for_timeout(1000)
+                                    has_errors = (
+                                        await modal.locator(
+                                            "[data-test-form-element-error-messages]"
+                                        ).count()
+                                        > 0
+                                    )
+
+                                    while has_errors:
+                                        form_to_fill = (
+                                            await self.frame.locator(
+                                                "[data-test-modal]"
+                                            )
+                                            .locator("form")
+                                            .nth(0)
+                                            .evaluate("element => element.outerHTML")
+                                        )
+                                        fields_to_fill = (
+                                            linked_in_xtract_required_fields(
+                                                html=form_to_fill,
+                                                only_unanswered=True,
+                                            )
+                                        )
+
+                                        success = await self._answer_form_questions(
+                                            form_str=fields_to_fill, modal=modal
+                                        )
+                                        if not success:
+                                            able_to_answer_form = False
+                                            break
+                                        await next_btn.click()
+                                        await self.page.wait_for_load_state(
+                                            "domcontentloaded"
+                                        )
+                                        await self.page.wait_for_timeout(1000)
+                                        break
+                                    if not able_to_answer_form:
+                                        break
+                                    review_application_btn = self.frame.locator(
+                                        "[data-test-modal]"
+                                    ).get_by_role(
+                                        "button", name="Review your application"
+                                    )
+
+                                    if await review_application_btn.count() > 0:
+                                        await review_application_btn.click()
+                                        print(
+                                            "Review application clicked 1 (TO TRIGGERR THE FORM TO SHOW THE FIELDS)"
+                                        )
+                                        break
+
+                                if not able_to_answer_form:
+                                    print(
+                                        "Not able to answer form... breaking the loop"
+                                    )
+                                    continue
+                                # REVIEW APPLICATIONS STAGE (PAST ALL THE NEXT)
+                                form = (
+                                    self.frame.locator("[data-test-modal]")
+                                    .locator("form")
+                                    .filter(has_text="Additional Questions")
+                                )
+                                submit_application_btn = modal.get_by_role(
+                                    "button", name="Submit application"
+                                )
+                                if (
+                                    await form.count() == 0
+                                    and await submit_application_btn.count() == 1
+                                ):
+                                    await submit_application_btn.click()
+                                    await self.page.wait_for_timeout(2500)
+                                    await self.page.keyboard.press("Escape")
+                                    continue
+                                form_html_string = await form.evaluate(
+                                    "element => element.outerHTML"
+                                )
+                                print("form_html_string", form_html_string)
+                                simplified_form_html = (
+                                    linked_in_xtract_required_fields(
+                                        html=form_html_string, only_unanswered=True
+                                    )
+                                )
+                                print(simplified_form_html)
+                                successfull = await self._answer_form_questions(
+                                    form_str=simplified_form_html, modal=modal
+                                )
+                                # not_now_btn = self.frame.get_by_role("button", name="Not now")
+                                if not successfull:
+                                    continue
+                                await review_application_btn.click()
+                                print(
+                                    "Review application clicked 2 - ACTUAL SUBMISSION OF THE FORM"
+                                )
+                                await self.page.wait_for_load_state(
+                                    "domcontentloaded"
+                                )
+                                await self.page.wait_for_timeout(1000)
+                                has_errors = (
+                                    await modal.locator(
+                                        "[data-test-form-element-error-messages]"
+                                    ).count()
+                                    > 0
+                                )
+                                able_to_answer_form = True
+                                while has_errors:
+                                    form = (
+                                        self.frame.locator("[data-test-modal]")
+                                        .locator("form")
+                                        .filter(has_text="Additional Questions")
+                                    )
+
+                                    form_html_string = await form.evaluate(
+                                        "element => element.outerHTML"
+                                    )
+
+                                    simplified_form_html = (
+                                        linked_in_xtract_required_fields(
+                                            form_html_string, only_unanswered=True
+                                        )
+                                    )
+                                    # note that this fn also handles the closing of the modal
+                                    successfull = await self._answer_form_questions(
+                                        form_str=simplified_form_html, modal=modal
+                                    )
+                                    if not successfull:
+                                        able_to_answer_form = False
+                                        break
+                                    await review_application_btn.click()
+                                    print(
+                                        "Review application clicked 3 - RETRY OF FILLING THE FORM"
+                                    )
+                                    await self.page.wait_for_timeout(1000)
+                                    break
+                                if not able_to_answer_form:
+                                    print("LINE 449 UNABLE TO ANSWER FORM CONTINUING")
+                                    continue
+                                follow_checkbox = modal.locator(
+                                    "#follow-company-checkbox"
+                                ).first
+                                if await follow_checkbox.count() == 0:
+                                    await submit_application_btn.click()
+                                    await self.page.wait_for_timeout(2500)
+                                    await self.page.keyboard.press("Escape")
+                                    break
+
+                                if await follow_checkbox.is_checked():
+                                    label = modal.locator(
+                                        "label[for='follow-company-checkbox']"
+                                    ).first
+                                    await label.click()
+
+                                    assert not await follow_checkbox.is_checked()
+                                await submit_application_btn.click()
+                                await self.page.wait_for_timeout(25000)
+                                await self.page.keyboard.press("Escape")
                                 self.append_job(
                                     run_summary=RunSummarry(
-                                        type=Type.SAVED,
                                         job_description=job_description,
                                         job_title=job_title,
                                         job_link=job_link,
@@ -362,187 +584,13 @@ class LinkedIn(BasePage):
                                         missing_skills=run_result["missing_skills"],
                                     )
                                 )
-                            continue
-                        ### INFO: Clicked easy apply btn - opens up the modal
-                        await easy_apply_btn.nth(0).click()
-
-                        try:
-                            await self.page.wait_for_timeout(1500)
-                            modal = self.frame.locator("[data-test-modal]")
-
-                            next_btn = modal.get_by_role(
-                                "button", name="Continue to next step"
-                            )
-                            if await next_btn.count() == 0:
-                                await modal.get_by_role(
-                                    "button", name="Submit application"
-                                ).click()
-                                await self.page.wait_for_timeout(2500)
-                                await self.page.wait_for_load_state("domcontentloaded")
-                                await self.page.keyboard.press("Escape")
-                                await self.page.wait_for_timeout(2500)
+                            except Exception as error:  # noqa: BLE001
+                                print("Error occured ", error)
+                                await self._handle_form_failure(modal=modal)
                                 continue
-
-                            able_to_answer_form = True
-                            while await next_btn.count() == 1:
-                                ### INFO: Clicked next button
-                                await next_btn.click()
-                                await self.page.wait_for_load_state("domcontentloaded")
-                                await self.page.wait_for_timeout(1000)
-                                has_errors = (
-                                    await modal.locator(
-                                        "[data-test-form-element-error-messages]"
-                                    ).count()
-                                    > 0
-                                )
-
-                                while has_errors:
-                                    form_to_fill = (
-                                        await self.frame.locator("[data-test-modal]")
-                                        .locator("form")
-                                        .nth(0)
-                                        .evaluate("element => element.outerHTML")
-                                    )
-                                    fields_to_fill = linked_in_xtract_required_fields(
-                                        html=form_to_fill, only_unanswered=True
-                                    )
-
-                                    success = await self._answer_form_questions(
-                                        form_str=fields_to_fill, modal=modal
-                                    )
-                                    if not success:
-                                        able_to_answer_form = False
-                                        break
-                                    await next_btn.click()
-                                    await self.page.wait_for_load_state(
-                                        "domcontentloaded"
-                                    )
-                                    await self.page.wait_for_timeout(1000)
-                                    break
-                                if not able_to_answer_form:
-                                    break
-                                review_application_btn = self.frame.locator(
-                                    "[data-test-modal]"
-                                ).get_by_role("button", name="Review your application")
-
-                                if await review_application_btn.count() > 0:
-                                    await review_application_btn.click()
-                                    print(
-                                        "Review application clicked 1 (TO TRIGGERR THE FORM TO SHOW THE FIELDS)"
-                                    )
-                                    break
-
-                            if not able_to_answer_form:
-                                print("Not able to answer form... breaking the loop")
-                                continue
-                            # REVIEW APPLICATIONS STAGE (PAST ALL THE NEXT)
-                            form = (
-                                self.frame.locator("[data-test-modal]")
-                                .locator("form")
-                                .filter(has_text="Additional Questions")
-                            )
-                            submit_application_btn = modal.get_by_role(
-                                "button", name="Submit application"
-                            )
-                            if (
-                                await form.count() == 0
-                                and await submit_application_btn.count() == 1
-                            ):
-                                await submit_application_btn.click()
-                                await self.page.wait_for_timeout(1000)
-                                await self.page.keyboard.press("Escape")
-                                continue
-                            form_html_string = await form.evaluate(
-                                "element => element.outerHTML"
-                            )
-                            print("form_html_string", form_html_string)
-                            simplified_form_html = linked_in_xtract_required_fields(
-                                html=form_html_string, only_unanswered=True
-                            )
-                            print(simplified_form_html)
-                            successfull = await self._answer_form_questions(
-                                form_str=simplified_form_html, modal=modal
-                            )
-                            # not_now_btn = self.frame.get_by_role("button", name="Not now")
-                            if not successfull:
-                                continue
-                            await review_application_btn.click()
-                            print(
-                                "Review application clicked 2 - ACTUAL SUBMISSION OF THE FORM"
-                            )
-                            await self.page.wait_for_load_state("domcontentloaded")
-                            await self.page.wait_for_timeout(1000)
-                            has_errors = (
-                                await modal.locator(
-                                    "[data-test-form-element-error-messages]"
-                                ).count()
-                                > 0
-                            )
-                            able_to_answer_form = True
-                            while has_errors:
-                                form = (
-                                    self.frame.locator("[data-test-modal]")
-                                    .locator("form")
-                                    .filter(has_text="Additional Questions")
-                                )
-
-                                form_html_string = await form.evaluate(
-                                    "element => element.outerHTML"
-                                )
-
-                                simplified_form_html = linked_in_xtract_required_fields(
-                                    form_html_string, only_unanswered=True
-                                )
-                                # note that this fn also handles the closing of the modal
-                                successfull = await self._answer_form_questions(
-                                    form_str=simplified_form_html, modal=modal
-                                )
-                                if not successfull:
-                                    able_to_answer_form = False
-                                    break
-                                await review_application_btn.click()
-                                print(
-                                    "Review application clicked 3 - RETRY OF FILLING THE FORM"
-                                )
-                                await self.page.wait_for_timeout(1000)
-                                break
-                            if not able_to_answer_form:
-                                print("LINE 449 UNABLE TO ANSWER FORM CONTINUING")
-                                continue
-                            follow_checkbox = modal.locator(
-                                "#follow-company-checkbox"
-                            ).first
-                            if await follow_checkbox.count() == 0:
-                                await submit_application_btn.click()
-                                await self.page.wait_for_timeout(1500)
-                                await self.page.keyboard.press("Escape")
-                                break
-
-                            if await follow_checkbox.is_checked():
-                                label = modal.locator(
-                                    "label[for='follow-company-checkbox']"
-                                ).first
-                                await label.click()
-
-                                assert not await follow_checkbox.is_checked()
-                            await submit_application_btn.click()
-                            await self.page.wait_for_timeout(1500)
-                            await self.page.keyboard.press("Escape")
-                            self.append_job(
-                                run_summary=RunSummarry(
-                                    job_description=job_description,
-                                    job_title=job_title,
-                                    job_link=job_link,
-                                    match=run_result["match"],
-                                    percentage=run_result["percentage"],
-                                    reasoning=run_result["reasoning"],
-                                    matched_skills=run_result["matched_skills"],
-                                    missing_skills=run_result["missing_skills"],
-                                )
-                            )
                         except Exception as error:  # noqa: BLE001
-                            print("Error occured ", error)
-                            await self._handle_form_failure(modal=modal)
+                            print(f"Failed to process job card {i}: {error}")
+                            await self._dismiss_blocking_overlay()
                             continue
                     next_page = self.frame.get_by_role("button", name="View next page")
                     if not await next_page.count() > 0:
@@ -554,7 +602,10 @@ class LinkedIn(BasePage):
             raise
 
     async def _search_and_filter(
-        self, keyword: str = "Software Engineer", listing_time: int | None = None
+        self,
+        keyword: str = "Software Engineer",
+        listing_time: int | None = None,
+        run_time: int = 1,
     ):
         basic_search = self.page.get_by_role("textbox", name="Title, skill or Company")
         if await basic_search.count() > 0:
@@ -569,7 +620,7 @@ class LinkedIn(BasePage):
         await self.page.keyboard.press("Enter")
         await self.wait_for_timeout(2)
 
-        if listing_time is not None:
+        if listing_time is not None and run_time == 1:
             date_posted_btn = self.frame.get_by_role(
                 "button", name="Date posted filter."
             )
@@ -614,17 +665,26 @@ class LinkedIn(BasePage):
         await self.page.wait_for_timeout(2000)
 
 
-if __name__ == "__main__":
+async def main():
     linkedin = LinkedIn()
 
     try:
-        asyncio.run(linkedin.automate_job_search())
-    except Exception as error:
+        await linkedin.automate_job_search()
+    except Exception as error:  # noqa: BLE001
         print("Something went wrong:", error)
         print("Retrying...")
-        asyncio.run(linkedin.automate_job_search())
+        await linkedin._clean_up()
+        try:
+            await linkedin.automate_job_search()
+        except Exception as retry_error:  # noqa: BLE001
+            print("Retry also failed:", retry_error)
     finally:
+        await linkedin._clean_up()
         print(f"Applied to {len(linkedin.run_summary)}")
         print("Generating summary")
         linkedin.generate_html_run_summary(page="linkedin")
         print("Execution finished")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

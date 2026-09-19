@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import pymupdf4llm
 
 _RESOURCES_DIR = Path(__file__).parent

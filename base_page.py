@@ -49,15 +49,15 @@ class BasePage:
         self.search_keys = [
             "Software Engineer",
             "Full stack developer",
-            "Laravel",
+            "Typescript",
             "React",
             "Node.js",
             "Python",
+            "Laravel",
             "Software Developer",
             "AWS",
             "DevOps",
         ]
-        self.run_summary = []
         user_data_dir = Path(
             rf"C:\Users\xtian\AppData\Local\BraveSoftware\Brave-Browser\{profile}"
         )

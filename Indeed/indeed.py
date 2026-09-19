@@ -18,6 +18,7 @@ INDEED_PAGE_LINK = "https://ph.indeed.com/"
 
 class Indeed(BasePage):
     def __init__(self):
+        super().__init__()
         self.search: Locator | None = None
 
     async def _search_and_filter(
@@ -213,73 +214,79 @@ class Indeed(BasePage):
                         ):
                             continue
 
-                        await job.scroll_into_view_if_needed()
-                        await job.click()
-
-                        await self.page.wait_for_timeout(2000)
-                        job_details_container = self.page.get_by_test_id(
-                            "viewjob-main-content"
-                        ).nth(0)
-
-                        job_header_container = self.page.get_by_test_id(
-                            "desktop-job-header"
-                        ).nth(0)
-                        quick_apply_btn = job_header_container.get_by_test_id(
-                            "viewjob-indeed-apply"
-                        )
-                        job_header_actions = job_header_container.get_by_test_id(
-                            "job-header-actions"
-                        )
-                        save_job_btn = job_header_actions.get_by_test_id(
-                            "vj-saveJobButton"
-                        )
-                        job_title = (
-                            await job_header_container.get_by_test_id("vj-job-title")
-                            .nth(0)
-                            .inner_text()
-                        )
-                        job_description = (
-                            await job_details_container.get_by_test_id(
-                                "viewjob-job-content"
-                            )
-                            .nth(0)
-                            .inner_text()
-                        )
-
-                        job_evaluation_result = await self.evaluate_job(
-                            job_title=job_title,
-                            job_description=job_description,
-                            workflow_name="Indeed Job Evaluation",
-                        )
-
-                        if job_evaluation_result is None:
-                            continue
-                        run_result = job_evaluation_result.final_output.model_dump()
-
-                        if run_result.get("match") is False:
-                            continue
-
-                        has_quick_apply_btn = await quick_apply_btn.count() > 0
-
-                        if not has_quick_apply_btn and run_result.get("Match") is True:
-                            await save_job_btn.click()
-                            self.append_job(
-                                RunSummarry(
-                                    type=Type.SAVED,
-                                    job_title=job_title,
-                                    job_link=job_link,
-                                    job_description=job_description,
-                                    match=run_result["match"],
-                                    percentage=run_result["percentage"],
-                                    reasoning=run_result["reasoning"],
-                                    matched_skills=run_result["matched_skills"],
-                                    missing_skills=run_result["missing_skills"],
-                                )
-                            )
-                            await self.wait_for_timeout(2)
-
-                            continue
+                        new_tab = None
                         try:
+                            await job.scroll_into_view_if_needed()
+                            await job.click()
+
+                            await self.page.wait_for_timeout(2000)
+                            job_details_container = self.page.get_by_test_id(
+                                "viewjob-main-content"
+                            ).nth(0)
+
+                            job_header_container = self.page.get_by_test_id(
+                                "desktop-job-header"
+                            ).nth(0)
+                            quick_apply_btn = job_header_container.get_by_test_id(
+                                "viewjob-indeed-apply"
+                            )
+                            job_header_actions = job_header_container.get_by_test_id(
+                                "job-header-actions"
+                            )
+                            save_job_btn = job_header_actions.get_by_test_id(
+                                "vj-saveJobButton"
+                            )
+                            job_title = (
+                                await job_header_container.get_by_test_id(
+                                    "vj-job-title"
+                                )
+                                .nth(0)
+                                .inner_text()
+                            )
+                            job_description = (
+                                await job_details_container.get_by_test_id(
+                                    "viewjob-job-content"
+                                )
+                                .nth(0)
+                                .inner_text()
+                            )
+
+                            job_evaluation_result = await self.evaluate_job(
+                                job_title=job_title,
+                                job_description=job_description,
+                                workflow_name="Indeed Job Evaluation",
+                            )
+
+                            if job_evaluation_result is None:
+                                continue
+                            run_result = job_evaluation_result.final_output.model_dump()
+
+                            if run_result.get("match") is False:
+                                continue
+
+                            has_quick_apply_btn = await quick_apply_btn.count() > 0
+
+                            if (
+                                not has_quick_apply_btn
+                                and run_result.get("Match") is True
+                            ):
+                                await save_job_btn.click()
+                                self.append_job(
+                                    RunSummarry(
+                                        type=Type.SAVED,
+                                        job_title=job_title,
+                                        job_link=job_link,
+                                        job_description=job_description,
+                                        match=run_result["match"],
+                                        percentage=run_result["percentage"],
+                                        reasoning=run_result["reasoning"],
+                                        matched_skills=run_result["matched_skills"],
+                                        missing_skills=run_result["missing_skills"],
+                                    )
+                                )
+                                await self.wait_for_timeout(2)
+
+                                continue
                             if has_quick_apply_btn and run_result.get("match") is True:
                                 async with self.page.context.expect_page() as new_page:
                                     await quick_apply_btn.click()
@@ -320,10 +327,12 @@ class Indeed(BasePage):
                                             simplified_form_html=simplified_form_html,
                                         )
 
+                                        await new_tab.wait_for_timeout(2_000)
+
                                         if not successfully_answered_form:
                                             error_occured_answering_form = True
                                             break
-                                if not error_occured_answering_form:
+                                if error_occured_answering_form is False:
                                     await new_tab.get_by_test_id(
                                         "submit-application-button"
                                     ).click()
@@ -347,7 +356,8 @@ class Indeed(BasePage):
                         except Exception as error:  # noqa: BLE001
                             print("Error occured...", error)
                             print("Continuing the loop")
-                            await new_tab.close()
+                            if new_tab is not None and not new_tab.is_closed():
+                                await new_tab.close()
                             continue
                     next_btn = self.page.get_by_test_id("pagination-page-next")
                     if await next_btn.count() == 0:
@@ -358,18 +368,25 @@ class Indeed(BasePage):
             print("Error", error)
             raise
 
-
-if __name__ == "__main__":
+async def main():
     indeed = Indeed()
 
     try:
-        asyncio.run(indeed.automate_job_search())
+        await indeed.automate_job_search()
     except Exception as error:  # noqa: BLE001
         print("Something went wrong:", error)
         print("Retrying...")
-        asyncio.run(indeed.automate_job_search())
+        await indeed._clean_up()
+        try:
+            await indeed.automate_job_search()
+        except Exception as retry_error:  # noqa: BLE001
+            print("Retry also failed:", retry_error)
     finally:
+        await indeed._clean_up()
         print("Execution finished")
         print("Genarating report")
-        asyncio.run(indeed.generate_html_run_summary(page="indeed"))
-        asyncio.run(indeed._clean_up())
+        indeed.generate_html_run_summary(page="indeed")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
