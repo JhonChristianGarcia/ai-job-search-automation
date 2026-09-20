@@ -280,6 +280,18 @@ class Jobstreet(BasePage):
                                 continue
 
                             job_title = await job_title_element.inner_text()
+
+                            title_result = await self.evaluate_job_title(
+                                job_title=job_title,
+                                workflow_name="Jobstreet Job Title Evaluation",
+                            )
+                            if (
+                                title_result is not None
+                                and title_result.final_output.model_dump().get("match")
+                                is False
+                            ):
+                                continue
+
                             job_description = await job_description_section.inner_text()
 
                             job_evaluation_result = await self.evaluate_job(

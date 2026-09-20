@@ -10,6 +10,7 @@ from playwright_stealth import Stealth
 from pydantic import BaseModel
 
 from custom_agents.job_analyzer import job_analyzer_agent
+from custom_agents.job_title_analyzer import job_title_analyzer_agent
 
 html_path = Path(__file__).parent / "utils" / "run_summary.html"
 
@@ -234,6 +235,42 @@ class BasePage:
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(output, encoding="utf-8")
+
+    async def evaluate_job_title(
+        self,
+        job_title: str,
+        workflow_name: str = "Job Title Evaluation",
+    ) -> RunResult | None:
+        """Cheap, title-only pre-filter run before the full job evaluation.
+
+        Returns None on failure so callers fail open (fall through to the
+        full evaluation) instead of silently skipping a possibly good job.
+        """
+        result = None
+        max_retries = 2
+        with trace(workflow_name=workflow_name):
+            for attempt in range(max_retries + 1):
+                try:
+                    result = await Runner.run(
+                        starting_agent=job_title_analyzer_agent,
+                        input=f"Job Title: {job_title}",
+                        max_turns=3,
+                    )
+                    break
+                except openai.BadRequestError as e:
+                    result = None
+                    if "json_validate_failed" in str(e) and attempt < max_retries:
+                        print(
+                            f"JSON validation failed for title '{job_title}'. Retrying ({attempt + 1}/{max_retries})..."
+                        )
+                        continue
+                    print("Error occured job title:", job_title)
+                    print("Error", e)
+                except KeyError as ke:
+                    result = None
+                    print(f"Missing key error {ke}")
+                    break
+        return result
 
     async def evaluate_job(
         self,

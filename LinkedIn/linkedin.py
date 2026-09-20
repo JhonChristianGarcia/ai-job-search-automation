@@ -338,6 +338,17 @@ class LinkedIn(BasePage):
                                 .evaluate("el => el.href")
                             )
 
+                            title_result = await self.evaluate_job_title(
+                                job_title=job_title,
+                                workflow_name="LinkedIn Job Title Evaluation",
+                            )
+                            if (
+                                title_result is not None
+                                and title_result.final_output.model_dump().get("match")
+                                is False
+                            ):
+                                continue
+
                             job_description = await job_details_section.locator(
                                 "#job-details"
                             ).inner_text()

@@ -243,6 +243,17 @@ class Indeed(BasePage):
                                 .nth(0)
                                 .inner_text()
                             )
+                            title_result = await self.evaluate_job_title(
+                                job_title=job_title,
+                                workflow_name="Indeed Job Title Evaluation",
+                            )
+                            if (
+                                title_result is not None
+                                and title_result.final_output.model_dump().get("match")
+                                is False
+                            ):
+                                continue
+
                             job_description = (
                                 await job_details_container.get_by_test_id(
                                     "viewjob-job-content"
@@ -295,20 +306,12 @@ class Indeed(BasePage):
                                     state="load", timeout=10_000
                                 )
                                 await new_tab.wait_for_timeout(5_000)
-                                continue_btn = new_tab.get_by_test_id("continue-button")
-                                print(
-                                    "Outside loop: Num of continue btn",
-                                    await continue_btn.count(),
+                                submit_btn = new_tab.get_by_test_id(
+                                    "submit-application-button"
                                 )
                                 error_occured_answering_form = False
-                                while await continue_btn.count() == 1:
-                                    print(
-                                        "Num of continue btn",
-                                        await continue_btn.count(),
-                                    )
-                                    await continue_btn.nth(0).click()
 
-                                    await new_tab.wait_for_timeout(2000)
+                                while await submit_btn.count() == 0:
                                     has_questions = (
                                         await new_tab.locator(".ia-Questions").count()
                                         > 0
@@ -332,10 +335,25 @@ class Indeed(BasePage):
                                         if not successfully_answered_form:
                                             error_occured_answering_form = True
                                             break
+
+                                        if await submit_btn.count() > 0:
+                                            break
+
+                                    continue_btn = new_tab.get_by_test_id(
+                                        "continue-button"
+                                    )
+                                    if await continue_btn.count() == 0:
+                                        print(
+                                            "Neither continue nor submit button found, aborting application"
+                                        )
+                                        error_occured_answering_form = True
+                                        break
+
+                                    await continue_btn.nth(0).click()
+                                    await new_tab.wait_for_timeout(2000)
+
                                 if error_occured_answering_form is False:
-                                    await new_tab.get_by_test_id(
-                                        "submit-application-button"
-                                    ).click()
+                                    await submit_btn.click()
                                     self.append_job(
                                         RunSummarry(
                                             type=Type.APPLIED,
