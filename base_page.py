@@ -154,6 +154,7 @@ class BasePage:
             "amcs",
             "dataannotation",
             "data annotation",
+            "pulsetheta",
         ]
 
         description = job_description.lower()

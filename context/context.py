@@ -30,10 +30,6 @@ Name:
 Resume:
 {resume}
 
-# Spot non-negotiables 
-- {applicant_name} is not open to FULL ONSITE WORK 
-- Reject any mention of FULL ONSITE WORK
-- If there are so many technologies that are required and the applicant does not, discourage applying
 
 # {applicant_name} do not want to the following job titles:
 - Data Engineer
@@ -44,9 +40,6 @@ Resume:
 - Mulesoft Developer
 - Product Engineer
 
-
-# Prioritize Remote and Hybrid work
-- The applicant prefers Remote or Hybrid work
 
 # Core evaluation philosophy
 

@@ -315,7 +315,7 @@ If the candidate's information is unavailable:
 - Do not fabricate an answer.
 - For SELECT fields, choose an option only when a reasonable answer can be
   determined from the available information.
-- Otherwise return "Unknown".
+- Otherwise return "N/A".
 - Never claim experience that is not explicitly supported.
 
 FINAL SELECT VALIDATION:

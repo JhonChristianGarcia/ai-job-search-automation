@@ -42,6 +42,8 @@ class Indeed(BasePage):
             await self.page.get_by_role("button", name="Update").nth(0).click()
             await self.wait_for_timeout()
 
+        if await self.page.get_by_role("button", name="Job type filter").count() == 0:
+            return
         await self.page.get_by_role("button", name="Job type filter").click()
         await self.wait_for_timeout()
         await (
@@ -298,7 +300,7 @@ class Indeed(BasePage):
                                 await self.wait_for_timeout(2)
 
                                 continue
-                            if has_quick_apply_btn and run_result.get("match") is True:
+                            if has_quick_apply_btn:
                                 async with self.page.context.expect_page() as new_page:
                                     await quick_apply_btn.click()
                                 new_tab = await new_page.value
@@ -309,8 +311,30 @@ class Indeed(BasePage):
                                 submit_btn = new_tab.get_by_test_id(
                                     "submit-application-button"
                                 )
+                                await self.page.pause()
                                 error_occured_answering_form = False
+                                continue_btn = new_tab.get_by_test_id(
+                                    "continue-button"
+                                ).or_(new_tab.get_by_role("button", name="Continue"))
 
+                                if await submit_btn.count() == 1:
+                                    await submit_btn.click()
+                                    self.append_job(
+                                        RunSummarry(
+                                            type=Type.APPLIED,
+                                            job_title=job_title,
+                                            job_description=job_description,
+                                            job_link=job_link,
+                                            match=run_result["match"],
+                                            percentage=run_result["percentage"],
+                                            reasoning=run_result["reasoning"],
+                                            matched_skills=run_result["matched_skills"],
+                                            missing_skills=run_result["missing_skills"],
+                                        )
+                                    )
+                                    await new_tab.wait_for_timeout(2500)
+                                    await new_tab.close()
+                                    continue
                                 while await submit_btn.count() == 0:
                                     has_questions = (
                                         await new_tab.locator(".ia-Questions").count()
@@ -339,9 +363,7 @@ class Indeed(BasePage):
                                         if await submit_btn.count() > 0:
                                             break
 
-                                    continue_btn = new_tab.get_by_test_id(
-                                        "continue-button"
-                                    )
+                                    await self.page.pause()
                                     if await continue_btn.count() == 0:
                                         print(
                                             "Neither continue nor submit button found, aborting application"
@@ -385,6 +407,7 @@ class Indeed(BasePage):
         except Exception as error:  # noqa: BLE001
             print("Error", error)
             raise
+
 
 async def main():
     indeed = Indeed()
