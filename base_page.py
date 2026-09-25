@@ -155,6 +155,7 @@ class BasePage:
             "dataannotation",
             "data annotation",
             "pulsetheta",
+            "globe telecom",
         ]
 
         description = job_description.lower()

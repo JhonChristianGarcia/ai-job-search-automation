@@ -311,7 +311,6 @@ class Indeed(BasePage):
                                 submit_btn = new_tab.get_by_test_id(
                                     "submit-application-button"
                                 )
-                                await self.page.pause()
                                 error_occured_answering_form = False
                                 continue_btn = new_tab.get_by_test_id(
                                     "continue-button"
@@ -358,17 +357,18 @@ class Indeed(BasePage):
 
                                         if not successfully_answered_form:
                                             error_occured_answering_form = True
+                                            await new_tab.close()
                                             break
 
                                         if await submit_btn.count() > 0:
                                             break
 
-                                    await self.page.pause()
                                     if await continue_btn.count() == 0:
                                         print(
                                             "Neither continue nor submit button found, aborting application"
                                         )
                                         error_occured_answering_form = True
+                                        await new_tab.close()
                                         break
 
                                     await continue_btn.nth(0).click()

@@ -2,7 +2,7 @@ import re
 
 
 def salary_in_range(
-    salary_range: str | None = None, desired_salary: int = 60_000
+    salary_range: str | None = None, desired_salary: int = 70_000
 ) -> bool:
     """Returns true if the salary range is within or exceeds the desired salary"""
     if not salary_range:
@@ -25,5 +25,5 @@ def salary_in_range(
 
 
 if __name__ == "__main__":
-    salary_range = "PHP25,000 - PHP45,000 a month"
+    salary_range = "PHP25,000 - PHP199,000 a month"
     print(salary_in_range(salary_range))

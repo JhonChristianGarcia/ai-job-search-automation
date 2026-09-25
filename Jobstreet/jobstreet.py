@@ -106,14 +106,29 @@ class Jobstreet(BasePage):
         self, error_msgs: list[str], simplified_form_html: str, new_tab: Page
     ):
         retries = 1
-        max_retries = 2
-
+        max_retries = 3
+        error_encountered = []
         while retries <= max_retries:
             with trace(workflow_name="Jobstreet Field Locator"):
                 try:
                     agent_input = f"""
                                 Required fields: {", ".join(error_msgs)}
                                 Raw HTML Form: {simplified_form_html}
+                                {
+                        '''
+                            IMPORTANT: The previous generated locator(s) failed to fill the form.
+
+                            Review the errors below and re-check the Raw HTML Form carefully.
+                            Do NOT repeat the same locator strategy that caused the error.
+                            If possible, generate a more specific and reliable locator based on
+                            the actual HTML structure, labels, attributes, or relationships.
+
+                            Previous errors:
+                            '''
+                        + "\n".join(error_encountered)
+                        if error_encountered
+                        else ""
+                    }
                                 """
                     locator_result = await Runner.run(
                         starting_agent=fields_extractor_agent,
@@ -132,27 +147,40 @@ class Jobstreet(BasePage):
                     print("Answers:", answers)
                     for field in locators:
                         field_answer = answers.get(field["field_name"])
-                        match field["field_type"]:
-                            case "select":
-                                select_element = new_tab.locator(field["locator"])
-                                await select_element.select_option(
-                                    field_answer["label"]
-                                )
+                        try:
+                            match field["field_type"]:
+                                case "select":
+                                    select_element = new_tab.locator(field["locator"])
+                                    await select_element.select_option(
+                                        field_answer["label"]
+                                    )
 
-                            case "checkbox" | "checkboxes":
-                                answers = field_answer["locator"]
-                                answer_list = answers.split(", ")
-                                for answer in answer_list:
-                                    checkbox_element = new_tab.locator(answer)
-                                    await checkbox_element.check()
-                            case "radio":
-                                radio_element = new_tab.locator(field_answer["locator"])
-                                await radio_element.click(force=True)
-                            case "textarea" | "text":
-                                text_area_element = new_tab.locator(
-                                    field_answer["locator"]
-                                )
-                                await text_area_element.fill(field_answer["label"])
+                                case "checkbox" | "checkboxes":
+                                    answer_locators = field_answer["locator"]
+                                    answer_list = answer_locators.split(", ")
+                                    for answer in answer_list:
+                                        checkbox_element = new_tab.locator(answer)
+                                        await checkbox_element.check()
+                                case "radio":
+                                    radio_element = new_tab.locator(
+                                        field_answer["locator"]
+                                    )
+                                    await radio_element.click(force=True)
+                                case "textarea" | "text":
+                                    text_area_element = new_tab.locator(
+                                        field_answer["locator"]
+                                    )
+                                    await text_area_element.fill(field_answer["label"])
+                        except Exception as e:
+                            error_encountered.append(
+                                f"""
+                                Field: {field["field_name"]}
+                                Type: {field["field_type"]}
+                                Generated locator: {field.get("locator")}
+                                Error: {e}
+                                """.strip()
+                            )
+                            raise
                     return True
                 except openai.BadRequestError as e:
                     print("Model error", e)
